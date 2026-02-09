@@ -1,6 +1,6 @@
 // Variables de colores
 $primary-color: #2f6feb;
-$primary-light: #eef3ff;
+$primary-light: #ceddff;
 $border-color: #e6eaf8;
 $text-color: #172b4d;
 $text-light: #6b7280;
@@ -50,7 +50,7 @@ $border-radius-lg: 8px;
 }
 
 body {
-  font-family: system-ui, Segoe UI, Roboto, Arial;
+  font-family: Roboto, system-ui, Segoe UI, Arial;
   background: $background-color;
   color: $text-color;
   margin: 0;
@@ -296,10 +296,13 @@ ul {
         margin-top: $spacing-md;
         width: 100%;
         max-width: 100%;
+        display: flex;
+        flex-direction: column;
 
         .filter-back {
             padding: $spacing-sm $spacing-md;
-            background: #f0f0f0;
+            background: $primary-color;
+            color: $primary-light;
             border-radius: $border-radius;
             cursor: pointer;
             display: inline-block;
@@ -310,6 +313,14 @@ ul {
             &:hover {
                 background: #e0e0e0;
             }
+        }
+
+        .download-year-btn {
+          margin: $spacing-xl auto $spacing-md;
+          align-self: flex-start;
+          order: 2;
+          width: 100%;
+          max-width: 480px;
         }
 
         .files-list-container {
@@ -406,6 +417,10 @@ ul {
 @media (max-width: 767px) {
     .result {
         .files-container {
+            .download-year-btn {
+              max-width: none;
+            }
+            
             .months-list {
                 flex-direction: column;
 

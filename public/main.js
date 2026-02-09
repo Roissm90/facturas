@@ -33,6 +33,13 @@ const deleteModalMessage = document.getElementById('delete-modal-message');
 const deleteModalConfirm = document.getElementById('delete-modal-confirm');
 const deleteModalCancel = document.getElementById('delete-modal-cancel');
 let pendingDeletePath = null;
+
+// Modal descarga completada
+const downloadModal = document.getElementById('download-modal');
+const downloadModalMessage = document.getElementById('download-modal-message');
+const downloadModalConfirm = document.getElementById('download-modal-confirm');
+const downloadModalCancel = document.getElementById('download-modal-cancel');
+let pendingDeleteYear = null;
 // Función auxiliar para extraer extensión y nombre base
 function getFileExtension(filename) {
   const idx = filename.lastIndexOf('.');
@@ -239,6 +246,14 @@ function renderList() {
     };
     el.appendChild(backDiv);
 
+    const downloadYearBtn = document.createElement('button');
+    downloadYearBtn.className = 'download-year-btn';
+    downloadYearBtn.innerText = 'Descargar año';
+    downloadYearBtn.onclick = async () => {
+      await downloadYearZip(downloadYearBtn, selectedYear);
+    };
+    el.appendChild(downloadYearBtn);
+
     const monthsDiv = document.createElement('div');
     monthsDiv.className = 'months-list';
 
@@ -339,6 +354,38 @@ function renderList() {
   }
 }
 
+async function downloadYearZip(btn, year) {
+  if (!year) return;
+  const originalText = btn.innerText;
+  btn.disabled = true;
+  btn.innerText = 'Descargando...';
+
+  try {
+    const resp = await fetch(`/download/year/${year}`);
+    if (!resp.ok) throw new Error('No se pudo descargar');
+    const blob = await resp.blob();
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `facturas_${year}.zip`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+
+    pendingDeleteYear = year;
+    if (downloadModalMessage) {
+      downloadModalMessage.innerText = `¿Quieres borrar las facturas del año ${year} para liberar espacio?`;
+    }
+    if (downloadModal) downloadModal.style.display = 'flex';
+  } catch (e) {
+    showToast('Error al descargar el año');
+  } finally {
+    btn.disabled = false;
+    btn.innerText = originalText;
+  }
+}
+
   // manejadores modal borrado
   if (deleteModalCancel) deleteModalCancel.addEventListener('click', () => { if (deleteModal) deleteModal.style.display = 'none'; pendingDeletePath = null; });
   if (deleteModalConfirm) deleteModalConfirm.addEventListener('click', async () => {
@@ -359,6 +406,36 @@ function renderList() {
     } finally {
       if (deleteModal) deleteModal.style.display = 'none';
       pendingDeletePath = null;
+    }
+  });
+
+  if (downloadModalCancel) downloadModalCancel.addEventListener('click', () => {
+    if (downloadModal) downloadModal.style.display = 'none';
+    pendingDeleteYear = null;
+  });
+
+  if (downloadModalConfirm) downloadModalConfirm.addEventListener('click', async () => {
+    if (!pendingDeleteYear) return;
+    try {
+      const resp = await fetch('/delete/year', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ year: pendingDeleteYear })
+      });
+      const j = await resp.json();
+      if (j && j.success) {
+        showToast(`Año ${pendingDeleteYear} borrado: ${j.deletedCount}`);
+        selectedYear = null;
+        selectedMonth = null;
+        fetchList();
+      } else {
+        showToast('No se pudo borrar el año');
+      }
+    } catch (e) {
+      showToast('Error borrando el año');
+    } finally {
+      if (downloadModal) downloadModal.style.display = 'none';
+      pendingDeleteYear = null;
     }
   });
 

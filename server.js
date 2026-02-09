@@ -6,6 +6,7 @@ const path = require('path');
 const cors = require('cors');
 const mongoose = require('mongoose');
 const cloudinary = require('cloudinary').v2;
+const archiver = require('archiver');
 const https = require('https');
 const http = require('http');
 
@@ -156,6 +157,35 @@ app.post('/delete', async (req, res) => {
   }
 });
 
+app.post('/delete/year', async (req, res) => {
+  try {
+    const year = req.body && req.body.year;
+    if (!year || typeof year !== 'string') {
+      return res.status(400).json({ success: false, error: 'year missing' });
+    }
+
+    const docs = await Invoice.find({ year }).lean();
+    let deletedCount = 0;
+    let failedCount = 0;
+
+    for (const doc of docs) {
+      try {
+        await cloudinary.uploader.destroy(doc.publicId, { resource_type: doc.resourceType || 'raw' });
+        await Invoice.deleteOne({ _id: doc._id });
+        deletedCount++;
+      } catch (e) {
+        console.error('delete year item error', e);
+        failedCount++;
+      }
+    }
+
+    return res.json({ success: true, deletedCount, failedCount });
+  } catch (e) {
+    console.error('delete year error', e);
+    return res.status(500).json({ success: false, error: 'internal' });
+  }
+});
+
 app.get('/file/:id', async (req, res) => {
   try {
     const doc = await Invoice.findById(req.params.id).lean();
@@ -209,6 +239,65 @@ app.get('/view/:id', async (req, res) => {
     });
   } catch (e) {
     console.error('view error', e);
+    return res.status(500).send('internal');
+  }
+});
+
+function streamFromUrl(url) {
+  return new Promise((resolve, reject) => {
+    const client = url.startsWith('https:') ? https : http;
+    client
+      .get(url, (r) => {
+        if (r.statusCode && r.statusCode >= 400) {
+          r.resume();
+          return reject(new Error(`upstream status ${r.statusCode}`));
+        }
+        return resolve(r);
+      })
+      .on('error', reject);
+  });
+}
+
+app.get('/download/year/:year', async (req, res) => {
+  try {
+    const year = String(req.params.year);
+    const docs = await Invoice.find({ year }).sort({ month: 1, storedName: 1 }).lean();
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="facturas_${year}.zip"`);
+
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    archive.on('error', (err) => {
+      console.error('zip error', err);
+      res.status(500).end();
+    });
+    archive.pipe(res);
+
+    for (const doc of docs) {
+      const month = doc.month || '00';
+      const name = doc.storedName || `file_${doc._id}`;
+      const safeName = name.replace(/[\\/:*?"<>|]+/g, '_');
+      const ext = path.extname(safeName).replace('.', '').toLowerCase();
+      const inferredType = ext === 'pdf' ? 'raw' : 'image';
+      const publicUrl = doc.url || cloudinary.url(doc.publicId, {
+        resource_type: doc.resourceType || inferredType,
+        type: 'upload',
+        secure: true,
+        format: ext || undefined,
+        version: doc.version || undefined
+      });
+
+      try {
+        const stream = await streamFromUrl(publicUrl);
+        archive.append(stream, { name: `${year}/${month}/${safeName}` });
+      } catch (e) {
+        console.error('zip file error', e);
+      }
+    }
+
+    await archive.finalize();
+  } catch (e) {
+    console.error('download year error', e);
     return res.status(500).send('internal');
   }
 });
