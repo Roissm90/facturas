@@ -96,6 +96,26 @@ ul {
   margin: 6px 0 12px 18px;
 }
 
+.title-page {
+  font-size: 28px;
+  font-weight: 800;
+  color: #172b4d;
+}
+
+.subtitle-page {
+  font-size: 22px;
+  font-weight: 600;
+  color: #172b4d;
+}
+
+@media (max-width: 767px) {
+  .title-page {
+    font-size: 22px;
+  }
+  .subtitle-page {
+    font-size: 18px;
+  }
+}
 .modal {
   position: fixed;
   inset: 0;
@@ -143,9 +163,16 @@ ul {
 }
 .modal .modal-actions {
   display: flex;
-  justify-content: flex-end;
   gap: 8px;
   margin-top: 12px;
+}
+@media (max-width: 767px) {
+  .modal .modal-actions {
+    flex-direction: column;
+  }
+  .modal .modal-actions button {
+    width: 100%;
+  }
 }
 .modal .file-row {
   display: flex;
@@ -269,7 +296,8 @@ ul {
   transition: background-color 0.2s ease;
 }
 .result .files-container .filter-back:hover {
-  background: #e0e0e0;
+  background: #ceddff;
+  color: #2f6feb;
 }
 .result .files-container .download-year-btn {
   margin: 20px auto 12px;

@@ -126,7 +126,7 @@ button {
   @media (max-width: 767px) {
     width: 100%;
     justify-content: center;
-    
+
     .text {
       display: none;
     }
@@ -145,6 +145,29 @@ button {
 // Listas
 ul {
   margin: $spacing-xs 0 $spacing-md 18px;
+}
+
+//titles
+.title-page {
+  font-size: 28px;
+  font-weight: 800;
+  color: $text-color;
+}
+
+.subtitle-page {
+  font-size: 22px;
+  font-weight: 600;
+  color: $text-color;
+}
+
+@media (max-width: 767px) {
+  .title-page {
+    font-size: 22px;
+  }
+
+  .subtitle-page {
+    font-size: 18px;
+  }
 }
 
 // Modal
@@ -197,9 +220,16 @@ ul {
 
   .modal-actions {
     display: flex;
-    justify-content: flex-end;
     gap: $spacing-sm;
     margin-top: $spacing-md;
+
+    @media (max-width: 767px) {
+      flex-direction: column;
+
+      button {
+        width: 100%;
+      }
+    }
   }
 
   .file-row {
@@ -335,7 +365,8 @@ ul {
             transition: background-color 0.2s ease;
 
             &:hover {
-                background: #e0e0e0;
+                background: $primary-light;
+                color: $primary-color;
             }
         }
 

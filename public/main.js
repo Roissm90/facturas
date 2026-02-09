@@ -194,7 +194,7 @@ async function modalConfirmUpload() {
   } catch (e) {
     result.innerText = 'Error al subir: ' + e.message;
   } finally {
-    uploadBtn.disabled = false;
+    uploadBtn.disabled = filesToUpload.length === 0;
     setUploadButtonLabel(false);
   }
 }
