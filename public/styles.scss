@@ -223,6 +223,14 @@ ul {
     gap: $spacing-sm;
     margin-top: $spacing-md;
 
+    button {
+      width: calc(50% - 4px);
+
+      &#modal-cancel {
+        background: #ef4444;
+      }
+    }
+
     @media (max-width: 767px) {
       flex-direction: column;
 
@@ -305,7 +313,44 @@ ul {
     color: $text-light;
     font-size: 13px;
     white-space: nowrap;
-    min-width: 50px;
+    min-width: 0;
+  }
+
+  .original-name {
+    color: $text-light;
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
+  }
+
+  .rename-input {
+    padding: $spacing-xs;
+    border: 1px solid $border-color;
+    border-radius: $border-radius;
+    font-size: 14px;
+    margin-left: auto;
+  }
+}
+
+@media (max-width: 767px) {
+  .file-row {
+    flex-flow: row wrap;
+    align-items: flex-start;
+
+    .original-name {
+      width: 100%;
+      min-width: 100%;
+    }
+
+    .rename-input {
+      flex: 1;
+    }
+
+    .file-row__extension {
+      min-width: 0;
+    }
   }
 }
 

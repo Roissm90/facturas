@@ -166,6 +166,12 @@ ul {
   gap: 8px;
   margin-top: 12px;
 }
+.modal .modal-actions button {
+  width: calc(50% - 4px);
+}
+.modal .modal-actions button#modal-cancel {
+  background: #ef4444;
+}
 @media (max-width: 767px) {
   .modal .modal-actions {
     flex-direction: column;
@@ -241,9 +247,40 @@ ul {
   color: #6b7280;
   font-size: 13px;
   white-space: nowrap;
-  min-width: 50px;
+  min-width: 0;
+}
+.file-row .original-name {
+  color: #6b7280;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+.file-row .rename-input {
+  padding: 6px;
+  border: 1px solid #e6eaf8;
+  border-radius: 6px;
+  font-size: 14px;
+  margin-left: auto;
 }
 
+@media (max-width: 767px) {
+  .file-row {
+    flex-flow: row wrap;
+    align-items: flex-start;
+  }
+  .file-row .original-name {
+    width: 100%;
+    min-width: 100%;
+  }
+  .file-row .rename-input {
+    flex: 1;
+  }
+  .file-row .file-row__extension {
+    min-width: 0;
+  }
+}
 .no-data {
   color: #6b7280;
   font-style: italic;
