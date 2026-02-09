@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: facturas-api
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        value: REPLACE_ME
+      - key: CLOUDINARY_CLOUD_NAME
+        value: REPLACE_ME
+      - key: CLOUDINARY_API_KEY
+        value: REPLACE_ME
+      - key: CLOUDINARY_API_SECRET
+        value: REPLACE_ME
