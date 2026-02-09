@@ -1,0 +1,437 @@
+// Variables de colores
+$primary-color: #2f6feb;
+$primary-light: #eef3ff;
+$border-color: #e6eaf8;
+$text-color: #172b4d;
+$text-light: #6b7280;
+$background-color: #f6f7fb;
+$white: #fff;
+$overlay-bg: rgba(0, 0, 0, 0.4);
+
+// Variables de espacio
+$spacing-xs: 6px;
+$spacing-sm: 8px;
+$spacing-md: 12px;
+$spacing-lg: 16px;
+$spacing-xl: 20px;
+$spacing-2xl: 40px;
+
+// Variables de bordes
+$border-radius: 6px;
+$border-radius-lg: 8px;
+
+// Mixins
+@mixin flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@mixin flex-between {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+@mixin input-base {
+  padding: $spacing-xs;
+  border: 1px solid $border-color;
+  border-radius: $border-radius;
+}
+
+// Estilos globales
+
+* {
+    padding: 0;
+    margin: 0;
+    box-sizing: border-box;
+    text-decoration: none;
+    list-style: none;
+}
+
+body {
+  font-family: system-ui, Segoe UI, Roboto, Arial;
+  background: $background-color;
+  color: $text-color;
+  margin: 0;
+  padding: $spacing-xl;
+  overflow-x: hidden;
+}
+
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+// Drop zone
+.drop-zone {
+  border: 2px dashed #9aa7d6;
+  padding: $spacing-2xl;
+  margin: $spacing-lg 0;
+  text-align: center;
+  border-radius: $border-radius-lg;
+  background: $white;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+
+  &.dragover {
+    background: $primary-light;
+  }
+}
+
+// Preview item
+.preview-item {
+  @include flex-between;
+  padding: $spacing-xs $spacing-sm;
+  background: $white;
+  margin-top: $spacing-sm;
+  border-radius: $border-radius;
+  border: 1px solid $border-color;
+}
+
+// Botón
+button {
+  background: $primary-color;
+  color: $white;
+  border: none;
+  padding: $spacing-sm $spacing-md;
+  border-radius: $border-radius;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  &:hover:not(:disabled) {
+    opacity: 0.9;
+  }
+}
+
+// Año y mes
+.year {
+  margin-top: $spacing-md;
+}
+
+.month {
+  margin-left: $spacing-md;
+}
+
+// Listas
+ul {
+  margin: $spacing-xs 0 $spacing-md 18px;
+}
+
+// Modal
+.modal {
+  position: fixed;
+  inset: 0;
+  background: $overlay-bg;
+  @include flex-center;
+  z-index: 40;
+
+  .modal-content {
+    background: $white;
+    padding: $spacing-lg;
+    border-radius: $border-radius-lg;
+    max-width: 520px;
+    width: 90%;
+    box-shadow: 0 10px 30px rgba(16, 24, 40, 0.2);
+
+    h3 {
+      margin-top: 0;
+      margin-bottom: $spacing-md;
+    }
+  }
+
+  .modal-date-field {
+    margin-bottom: $spacing-lg;
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-sm;
+
+    label {
+      font-weight: 600;
+      color: $text-color;
+      font-size: 14px;
+    }
+  }
+
+  .modal-date-input {
+    @include input-base;
+    padding: $spacing-sm $spacing-md;
+    font-size: 14px;
+    min-width: 250px;
+
+    &:focus {
+      outline: none;
+      border-color: $primary-color;
+      box-shadow: 0 0 0 3px rgba(47, 111, 235, 0.1);
+    }
+  }
+
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: $spacing-sm;
+    margin-top: $spacing-md;
+  }
+
+  .file-row {
+    display: flex;
+    gap: $spacing-sm;
+    align-items: center;
+    padding: $spacing-xs 0;
+    border-bottom: 1px solid $border-color;
+
+    &:last-child {
+      border-bottom: 0;
+    }
+  }
+}
+
+// Nombre original
+.original-name {
+  color: $text-light;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+
+// Preview item y sus elementos
+.preview-item {
+  @include flex-between;
+  padding: $spacing-xs $spacing-sm;
+  background: $white;
+  margin: $spacing-sm 0;
+  border-radius: $border-radius;
+  border: 1px solid $border-color;
+
+  .preview-item__name-section {
+    display: flex;
+    gap: $spacing-sm;
+    align-items: center;
+    flex: 1;
+
+    .rename-input {
+        @include input-base;
+        flex: 1;
+        display: none;
+    }
+  }
+
+  .preview-item__extension {
+    color: $text-light;
+    font-size: 13px;
+    white-space: nowrap;
+    display: none;
+  }
+
+  &__remove-btn {
+    flex-shrink: 0;
+  }
+}
+
+// File row en modal
+.file-row {
+  display: flex;
+  gap: $spacing-sm;
+  align-items: center;
+  padding: $spacing-xs 0;
+  border-bottom: 1px solid $border-color;
+
+  &:last-child {
+    border-bottom: 0;
+  }
+
+  &__extension {
+    color: $text-light;
+    font-size: 13px;
+    white-space: nowrap;
+    min-width: 50px;
+  }
+}
+
+// Elementos dinámicos del listado
+.no-data {
+  color: $text-light;
+  font-style: italic;
+  margin: $spacing-md 0;
+  padding: $spacing-md;
+  background: #f9f9f9;
+  border-radius: $border-radius;
+  text-align: center;
+}
+
+// Listado de años
+.years-list {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-sm;
+}
+
+.year-item {
+  padding: $spacing-sm $spacing-md;
+  background: $primary-light;
+  border-radius: $border-radius;
+  cursor: pointer;
+  font-weight: bold;
+  color: $text-color;
+  transition: background-color 0.2s ease;
+
+  &:hover {
+    background: #d7e8ff;
+  }
+}
+
+// Listado de archivos
+.result {
+    width: 100%;
+    max-width: 100%;
+
+    .files-container {
+        margin-top: $spacing-md;
+        width: 100%;
+        max-width: 100%;
+
+        .filter-back {
+            padding: $spacing-sm $spacing-md;
+            background: #f0f0f0;
+            border-radius: $border-radius;
+            cursor: pointer;
+            display: inline-block;
+            margin-bottom: $spacing-md;
+            font-weight: 600;
+            transition: background-color 0.2s ease;
+
+            &:hover {
+                background: #e0e0e0;
+            }
+        }
+
+        .files-list-container {
+            margin-top: $spacing-md;
+
+            .files-list__items {
+                margin: $spacing-md 0;
+                list-style: none;
+                padding: 0;
+
+                .file-item {
+                    margin-bottom: $spacing-sm;
+                    display: flex;
+                    flex-direction: row-reverse;
+                    justify-content: flex-end;
+                    gap: 12px;
+                    border-radius: $border-radius;
+                    margin-left: 16px;
+
+                    .file-link {
+                        color: $primary-color;
+                        text-decoration: none;
+                        transition: opacity 0.2s ease;
+
+                        &:hover {
+                            opacity: 0.7;
+                            text-decoration: underline;
+                        }
+
+                        &:visited {
+                            color: #9b5fc9;
+                        }
+                    }
+
+                    .file-item__delete-btn {
+                        min-width: 18px;
+                        min-height: 18px;
+                        border: none;
+                        color: #fff;
+                        padding: 0;
+                        border-radius: $border-radius;
+                        cursor: pointer;
+                        background-color: transparent;
+
+                        &:hover {
+                            opacity: 0.9;
+                        }
+
+                        svg {
+                            width: 18px;
+                            height: 18px;
+                            stroke: #ef4444;
+                            fill: none;
+                        }
+                    }
+                }
+            }
+        }
+
+        .months-list {
+            display: flex;
+            flex-wrap: wrap;
+            width: 100%;
+            max-width: 100%;
+            gap: $spacing-sm;
+
+            .month-item {
+                width: calc(50% - 4px);
+                min-width: calc(50% - 4px);
+                padding: $spacing-sm $spacing-md;
+                background: $primary-light;
+                border-radius: $border-radius;
+                cursor: pointer;
+                font-weight: bold;
+                color: $text-color;
+                transition: background-color 0.2s ease;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+
+                &:hover {
+                    background: #d7e8ff;
+                }
+
+                .month-count {
+                    font-weight: 200;
+                    color: $text-light;
+                }
+            }
+        }
+    }
+}
+
+@media (max-width: 767px) {
+    .result {
+        .files-container {
+            .months-list {
+                flex-direction: column;
+
+                .month-item {
+                    width: 100%;
+                    min-width: 100%;
+                }
+            }
+        }
+    }
+}
+
+
+/* Modal danger button */
+.danger { background: #ef4444 }
+
+/* Toast simple */
+.toast {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  background: rgba(16,24,40,0.95);
+  color: #fff;
+  padding: 10px 14px;
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(2,6,23,0.2);
+  z-index: 9999;
+  transition: opacity 0.3s ease;
+}

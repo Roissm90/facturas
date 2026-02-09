@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Gestor de Facturas</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <div class="container">
+      <h1>Organizador de Facturas</h1>
+
+      <div id="drop-zone" class="drop-zone">Arrastra aquí imágenes o PDFs (o haz click)</div>
+      <input id="file-input" type="file" multiple style="display:none" accept="image/*,application/pdf" />
+
+      <div id="preview"></div>
+
+      <button id="upload-btn" disabled>Subir archivos</button>
+
+      <h2 style="margin-top: 12px;">Subidas</h2>
+      <div id="result" class="result"></div>
+    </div>
+
+    <!-- Modal para renombrar archivos antes de subir -->
+    <div id="rename-modal" class="modal" style="display:none">
+      <div class="modal-content">
+        <h3>Confirmar nombres de archivos</h3>
+        
+        <div class="modal-date-field">
+          <label for="invoice-date">Fecha de factura (mes/año):</label>
+          <input id="invoice-date" type="month" class="modal-date-input" />
+        </div>
+        
+        <div id="modal-list"></div>
+        
+        <div class="modal-actions">
+          <button id="modal-cancel">Cancelar</button>
+          <button id="modal-confirm">Confirmar y subir</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal para seleccionar año -->
+    <div id="year-modal" class="modal" style="display:none">
+      <div class="modal-content">
+        <h3>Seleccionar año</h3>
+        <div id="year-modal-list"></div>
+        <div class="modal-actions">
+          <button id="year-modal-close">Cerrar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal para seleccionar mes -->
+    <div id="month-modal" class="modal" style="display:none">
+      <div class="modal-content">
+        <h3>Seleccionar mes</h3>
+        <div id="month-modal-list"></div>
+        <div class="modal-actions">
+          <button id="month-modal-close">Cerrar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal de confirmación de borrado -->
+    <div id="delete-modal" class="modal" style="display:none">
+      <div class="modal-content">
+        <h3>Confirmar borrado</h3>
+        <p id="delete-modal-message">¿Deseas borrar este archivo?</p>
+        <div class="modal-actions">
+          <button id="delete-modal-cancel">Cancelar</button>
+          <button id="delete-modal-confirm" class="danger">Borrar</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://unpkg.com/feather-icons"></script>
+    <script src="/main.js"></script>
+  </body>
+</html>
