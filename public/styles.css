@@ -480,6 +480,9 @@ ul {
   .result .files-container .download-year-btn {
     max-width: none;
   }
+  .result .files-container .download-excel-btn {
+    max-width: none;
+  }
   .result .files-container .months-list {
     flex-direction: column;
   }

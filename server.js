@@ -518,7 +518,7 @@ function buildExcelBuffer(rows, sheetName) {
   const totalRow = [
     '',
     '',
-    'TOTAL',
+    '',
     formatCentsToAmount(totals.base),
     '',
     formatCentsToAmount(totals.ded),
