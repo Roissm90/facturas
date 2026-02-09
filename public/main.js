@@ -305,7 +305,7 @@ function renderList() {
         li.className = 'file-item';
         const a = document.createElement('a');
         a.className = 'file-link';
-        a.href = '/' + f.path;
+        a.href = `/file/${f.id}`;
         a.innerText = f.name;
         a.target = '_blank';
         li.appendChild(a);
@@ -318,7 +318,7 @@ function renderList() {
         delBtn.innerHTML = '<i data-feather="trash-2"></i>';
         // mostrar modal al clicar
         delBtn.addEventListener('click', () => {
-          pendingDeletePath = f.path;
+          pendingDeletePath = f.id;
           if (deleteModalMessage) deleteModalMessage.innerText = `¿Borrar "${f.name}"?`;
           if (deleteModal) deleteModal.style.display = 'flex';
         });
@@ -344,11 +344,11 @@ function renderList() {
   if (deleteModalConfirm) deleteModalConfirm.addEventListener('click', async () => {
     if (!pendingDeletePath) return;
     try {
-      const resp = await fetch('/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: pendingDeletePath }) });
+      const resp = await fetch('/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: pendingDeletePath }) });
       const j = await resp.json();
       if (j && j.success) {
         // mostrar toast con nombre borrado
-        const deletedName = (j.deleted) ? j.deleted : pendingDeletePath.split('/').pop();
+        const deletedName = (j.deleted) ? j.deleted : pendingDeletePath;
         showToast(`Archivo borrado: ${deletedName}`);
         fetchList();
       } else {
