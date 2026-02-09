@@ -29,6 +29,7 @@ app.get('/styles.css.map', (req, res) => {
 
 const AUTH_COOKIE = 'facturas_auth';
 const APP_PASSWORD = process.env.APP_PASSWORD || '';
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const AUTH_TOKEN = APP_PASSWORD
   ? crypto.createHash('sha256').update(APP_PASSWORD).digest('hex')
   : null;
@@ -79,7 +80,8 @@ app.post('/login', (req, res) => {
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
-    path: '/'
+    path: '/',
+    maxAge: ONE_DAY_MS
   });
   return res.redirect('/');
 });
