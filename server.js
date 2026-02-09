@@ -5,6 +5,7 @@ const exifParser = require('exif-parser');
 const path = require('path');
 const cors = require('cors');
 const mongoose = require('mongoose');
+const crypto = require('crypto');
 const cloudinary = require('cloudinary').v2;
 const archiver = require('archiver');
 const https = require('https');
@@ -14,8 +15,68 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
+
+const AUTH_COOKIE = 'facturas_auth';
+const APP_PASSWORD = process.env.APP_PASSWORD || '';
+const AUTH_TOKEN = APP_PASSWORD
+  ? crypto.createHash('sha256').update(APP_PASSWORD).digest('hex')
+  : null;
+
+function parseCookies(header) {
+  const out = {};
+  if (!header) return out;
+  header.split(';').forEach((part) => {
+    const idx = part.indexOf('=');
+    if (idx === -1) return;
+    const key = part.slice(0, idx).trim();
+    const value = part.slice(idx + 1).trim();
+    out[key] = value;
+  });
+  return out;
+}
+
+function isAuthed(req) {
+  if (!AUTH_TOKEN) return true;
+  const cookies = parseCookies(req.headers.cookie);
+  return cookies[AUTH_COOKIE] === AUTH_TOKEN;
+}
+
+if (AUTH_TOKEN) {
+  app.use((req, res, next) => {
+    if (req.path === '/login' || req.path === '/logout') return next();
+    if (isAuthed(req)) return next();
+    if (req.method === 'GET' || req.method === 'HEAD') return res.redirect('/login');
+    return res.status(401).json({ error: 'unauthorized' });
+  });
+}
+
+app.get('/login', (req, res) => {
+  if (isAuthed(req)) return res.redirect('/');
+  return res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+app.post('/login', (req, res) => {
+  if (!AUTH_TOKEN) return res.redirect('/');
+  const password = String((req.body && req.body.password) || '');
+  const token = crypto.createHash('sha256').update(password).digest('hex');
+  if (token !== AUTH_TOKEN) return res.status(401).send('Invalid password');
+  res.cookie(AUTH_COOKIE, AUTH_TOKEN, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/'
+  });
+  return res.redirect('/');
+});
+
+app.get('/logout', (req, res) => {
+  res.clearCookie(AUTH_COOKIE, { path: '/' });
+  return res.redirect('/login');
+});
+
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Use memory storage so we can inspect the buffer for EXIF and then upload to Cloudinary.
 const upload = multer({ storage: multer.memoryStorage() });
