@@ -369,8 +369,52 @@ function validateInvoiceMeta() {
       showToast('Falta el importe total');
       return false;
     }
+
+    const baseCents = parseAmountToCents(fObj.baseAmount);
+    const dedCents = parseAmountToCents(fObj.vatDeductible || '0') || 0;
+    const nonDedCents = parseAmountToCents(fObj.vatNonDeductible || '0') || 0;
+    const totalCents = parseAmountToCents(fObj.totalAmount);
+
+    if (baseCents === null || totalCents === null || dedCents === null || nonDedCents === null) {
+      showToast('Formato numerico invalido en importes');
+      return false;
+    }
+
+    const sumCents = baseCents + dedCents + nonDedCents;
+    if (sumCents !== totalCents) {
+      showToast('La suma de base + IVA deducible + IVA no deducible debe igualar el total');
+      return false;
+    }
   }
   return true;
+}
+
+function parseAmountToCents(value) {
+  if (value === null || value === undefined) return null;
+  const trimmed = String(value).trim();
+  if (!trimmed) return null;
+  const cleaned = trimmed.replace(/[^0-9,.-]/g, '');
+  if (!cleaned) return null;
+
+  const hasComma = cleaned.includes(',');
+  const hasDot = cleaned.includes('.');
+  let normalized = cleaned;
+
+  if (hasComma && hasDot) {
+    const lastComma = cleaned.lastIndexOf(',');
+    const lastDot = cleaned.lastIndexOf('.');
+    if (lastComma > lastDot) {
+      normalized = cleaned.replace(/\./g, '').replace(',', '.');
+    } else {
+      normalized = cleaned.replace(/,/g, '');
+    }
+  } else if (hasComma) {
+    normalized = cleaned.replace(',', '.');
+  }
+
+  const num = Number.parseFloat(normalized);
+  if (Number.isNaN(num)) return null;
+  return Math.round(num * 100);
 }
 
 async function fetchList() {
