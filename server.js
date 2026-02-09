@@ -8,6 +8,7 @@ const mongoose = require('mongoose');
 const crypto = require('crypto');
 const cloudinary = require('cloudinary').v2;
 const archiver = require('archiver');
+const XLSX = require('xlsx');
 const https = require('https');
 const http = require('http');
 
@@ -29,6 +30,7 @@ app.get('/styles.css.map', (req, res) => {
 
 const AUTH_COOKIE = 'facturas_auth';
 const APP_PASSWORD = process.env.APP_PASSWORD || '';
+const INVOICE_DATA_KEY = process.env.INVOICE_DATA_KEY || '';
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const AUTH_TOKEN = APP_PASSWORD
   ? crypto.createHash('sha256').update(APP_PASSWORD).digest('hex')
@@ -110,6 +112,14 @@ const invoiceSchema = new mongoose.Schema({
   resourceType: String,
   accessMode: String,
   version: Number,
+  invoiceDateEnc: String,
+  invoiceNumberEnc: String,
+  baseAmountEnc: String,
+  vatRateEnc: String,
+  vatDeductibleEnc: String,
+  vatNonDeductibleEnc: String,
+  totalAmountEnc: String,
+  invoiceDateSort: Date,
   year: String,
   month: String,
   createdAt: { type: Date, default: Date.now }
@@ -148,28 +158,112 @@ function uploadBufferToCloudinary(file, folder, publicId, resourceType) {
   });
 }
 
+function getInvoiceKey() {
+  return crypto.createHash('sha256').update(INVOICE_DATA_KEY).digest();
+}
+
+function encryptText(value) {
+  if (!value) return '';
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', getInvoiceKey(), iv);
+  const encrypted = Buffer.concat([cipher.update(String(value), 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `${iv.toString('base64')}:${tag.toString('base64')}:${encrypted.toString('base64')}`;
+}
+
+function decryptText(value) {
+  if (!value) return '';
+  const parts = String(value).split(':');
+  if (parts.length !== 3) return '';
+  const [ivB64, tagB64, dataB64] = parts;
+  try {
+    const iv = Buffer.from(ivB64, 'base64');
+    const tag = Buffer.from(tagB64, 'base64');
+    const data = Buffer.from(dataB64, 'base64');
+    const decipher = crypto.createDecipheriv('aes-256-gcm', getInvoiceKey(), iv);
+    decipher.setAuthTag(tag);
+    const decrypted = Buffer.concat([decipher.update(data), decipher.final()]);
+    return decrypted.toString('utf8');
+  } catch (e) {
+    return '';
+  }
+}
+
+function parseDateInput(value) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+}
+
+function parseDateFlexible(value) {
+  if (!value) return null;
+  const iso = parseDateInput(value);
+  if (iso) return iso;
+  const str = String(value);
+  const matchLong = str.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (matchLong) {
+    const day = Number(matchLong[1]);
+    const month = Number(matchLong[2]) - 1;
+    const year = Number(matchLong[3]);
+    const parsed = new Date(year, month, day);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  const matchShort = str.match(/^(\d{2})\/(\d{2})\/(\d{2})$/);
+  if (matchShort) {
+    const day = Number(matchShort[1]);
+    const month = Number(matchShort[2]) - 1;
+    const year = 2000 + Number(matchShort[3]);
+    const parsed = new Date(year, month, day);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  return null;
+}
+
+function buildSortKey(dateValue) {
+  if (!dateValue) return 0;
+  const parsed = new Date(dateValue);
+  if (Number.isNaN(parsed.getTime())) return 0;
+  const y = parsed.getFullYear();
+  const m = String(parsed.getMonth() + 1).padStart(2, '0');
+  const d = String(parsed.getDate()).padStart(2, '0');
+  return Number(`${y}${m}${d}`);
+}
+
+function formatDateDDMMYYYY(value) {
+  if (!value) return '';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return String(value);
+  const d = String(parsed.getDate()).padStart(2, '0');
+  const m = String(parsed.getMonth() + 1).padStart(2, '0');
+  const y = parsed.getFullYear();
+  return `${d}/${m}/${y}`;
+}
+
 app.post('/upload', upload.array('files'), async (req, res) => {
   if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'No files uploaded' });
 
   try {
     const saved = [];
-
-    // Si el cliente envía una fecha (YYYY-MM), usarla para organizar
-    let clientYear = null;
-    let clientMonth = null;
-    if (req.body && req.body.invoiceDate) {
-      const parts = String(req.body.invoiceDate).split('-');
-      if (parts.length >= 2) {
-        clientYear = parts[0];
-        clientMonth = parts[1].padStart(2, '0');
+    let metaList = [];
+    if (req.body && req.body.meta) {
+      try {
+        metaList = JSON.parse(req.body.meta);
+      } catch (e) {
+        metaList = [];
       }
     }
 
-    for (const file of req.files) {
+    for (let i = 0; i < req.files.length; i++) {
+      const file = req.files[i];
+      const meta = metaList[i] || {};
+      const invoiceDateRaw = meta.invoiceDate ? String(meta.invoiceDate) : '';
+      const invoiceDateParsed = parseDateInput(invoiceDateRaw);
+
       // prioridad: fecha enviada por cliente -> EXIF -> ahora
       let date = null;
-      if (clientYear && clientMonth) {
-        date = new Date(Number(clientYear), Number(clientMonth) - 1, 1);
+      if (invoiceDateParsed) {
+        date = invoiceDateParsed;
       } else {
         date = getDateFromBuffer(file) || new Date();
       }
@@ -195,6 +289,14 @@ app.post('/upload', upload.array('files'), async (req, res) => {
         resourceType: uploadResult.resource_type,
         accessMode: uploadResult.access_mode,
         version: uploadResult.version,
+        invoiceDateEnc: encryptText(invoiceDateRaw),
+        invoiceNumberEnc: encryptText(meta.invoiceNumber),
+        baseAmountEnc: encryptText(meta.baseAmount),
+        vatRateEnc: encryptText(meta.vatRate),
+        vatDeductibleEnc: encryptText(meta.vatDeductible),
+        vatNonDeductibleEnc: encryptText(meta.vatNonDeductible),
+        totalAmountEnc: encryptText(meta.totalAmount),
+        invoiceDateSort: date,
         year,
         month
       });
@@ -334,6 +436,59 @@ function streamFromUrl(url) {
   });
 }
 
+function buildInvoiceRows(docs) {
+  return docs.map((doc) => {
+    const decryptedDate = decryptText(doc.invoiceDateEnc);
+    const parsedDate = parseDateFlexible(decryptedDate) || doc.invoiceDateSort || doc.createdAt || null;
+    const sortKey = buildSortKey(parsedDate);
+    const displayDate = parsedDate ? formatDateDDMMYYYY(parsedDate) : formatDateDDMMYYYY(decryptedDate);
+
+    return {
+      sortKey,
+      row: {
+        'fecha': displayDate,
+        'nº factura': decryptText(doc.invoiceNumberEnc),
+        'nombre': doc.storedName || '',
+        'base imponible': decryptText(doc.baseAmountEnc),
+        'tipo': decryptText(doc.vatRateEnc),
+        'IVA deducible': decryptText(doc.vatDeductibleEnc),
+        'IVA no deducible': decryptText(doc.vatNonDeductibleEnc),
+        'importe total': decryptText(doc.totalAmountEnc)
+      }
+    };
+  });
+}
+
+function buildExcelBuffer(rows, sheetName) {
+  const workbook = XLSX.utils.book_new();
+  const headers = ['fecha', 'nº factura', 'nombre', 'base imponible', 'tipo', 'IVA deducible', 'IVA no deducible', 'importe total'];
+  const worksheet = rows.length
+    ? XLSX.utils.json_to_sheet(rows, { header: headers })
+    : XLSX.utils.aoa_to_sheet([headers]);
+
+  XLSX.utils.book_append_sheet(workbook, worksheet, sheetName || 'Facturas');
+  return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+}
+
+app.get('/export/year/:year', async (req, res) => {
+  try {
+    const year = String(req.params.year);
+    const docs = await Invoice.find({ year }).lean();
+    const rows = buildInvoiceRows(docs)
+      .sort((a, b) => a.sortKey - b.sortKey)
+      .map((item) => item.row);
+    const buffer = buildExcelBuffer(rows, `Facturas ${year}`);
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="facturas_${year}.xlsx"`);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.end(buffer);
+  } catch (e) {
+    console.error('export year error', e);
+    return res.status(500).send('internal');
+  }
+});
+
 app.get('/download/year/:year', async (req, res) => {
   try {
     const year = String(req.params.year);
@@ -410,6 +565,7 @@ async function start() {
   if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
     throw new Error('Missing Cloudinary env vars');
   }
+  if (!INVOICE_DATA_KEY) throw new Error('Missing INVOICE_DATA_KEY');
   await mongoose.connect(process.env.MONGODB_URI);
   app.listen(PORT, () => console.log(`Servidor escuchando en http://localhost:${PORT}`));
 }
