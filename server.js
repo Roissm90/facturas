@@ -240,6 +240,39 @@ function formatDateDDMMYYYY(value) {
   return `${d}/${m}/${y}`;
 }
 
+function parseAmountToCents(value) {
+  if (value === null || value === undefined) return null;
+  const trimmed = String(value).trim();
+  if (!trimmed) return null;
+  const cleaned = trimmed.replace(/[^0-9,.-]/g, '');
+  if (!cleaned) return null;
+
+  const hasComma = cleaned.includes(',');
+  const hasDot = cleaned.includes('.');
+  let normalized = cleaned;
+
+  if (hasComma && hasDot) {
+    const lastComma = cleaned.lastIndexOf(',');
+    const lastDot = cleaned.lastIndexOf('.');
+    if (lastComma > lastDot) {
+      normalized = cleaned.replace(/\./g, '').replace(',', '.');
+    } else {
+      normalized = cleaned.replace(/,/g, '');
+    }
+  } else if (hasComma) {
+    normalized = cleaned.replace(',', '.');
+  }
+
+  const num = Number.parseFloat(normalized);
+  if (Number.isNaN(num)) return null;
+  return Math.round(num * 100);
+}
+
+function formatCentsToAmount(cents) {
+  const value = (cents || 0) / 100;
+  return value.toFixed(2).replace('.', ',');
+}
+
 app.post('/upload', upload.array('files'), async (req, res) => {
   if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'No files uploaded' });
 
@@ -465,6 +498,35 @@ function buildExcelBuffer(rows, sheetName) {
   const worksheet = rows.length
     ? XLSX.utils.json_to_sheet(rows, { header: headers })
     : XLSX.utils.aoa_to_sheet([headers]);
+
+  const totals = rows.reduce(
+    (acc, row) => {
+      const base = parseAmountToCents(row['base imponible']) || 0;
+      const ded = parseAmountToCents(row['IVA deducible']) || 0;
+      const nonDed = parseAmountToCents(row['IVA no deducible']) || 0;
+      const total = parseAmountToCents(row['importe total']) || 0;
+      return {
+        base: acc.base + base,
+        ded: acc.ded + ded,
+        nonDed: acc.nonDed + nonDed,
+        total: acc.total + total
+      };
+    },
+    { base: 0, ded: 0, nonDed: 0, total: 0 }
+  );
+
+  const totalRow = [
+    '',
+    '',
+    'TOTAL',
+    formatCentsToAmount(totals.base),
+    '',
+    formatCentsToAmount(totals.ded),
+    formatCentsToAmount(totals.nonDed),
+    formatCentsToAmount(totals.total)
+  ];
+
+  XLSX.utils.sheet_add_aoa(worksheet, [totalRow], { origin: -1 });
 
   XLSX.utils.book_append_sheet(workbook, worksheet, sheetName || 'Facturas');
   return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
