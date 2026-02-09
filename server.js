@@ -18,6 +18,15 @@ app.use(cors());
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
+// Public assets needed for the login page.
+app.use('/assets', express.static(path.join(__dirname, 'public', 'assets')));
+app.get('/styles.css', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'styles.css'));
+});
+app.get('/styles.css.map', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'styles.css.map'));
+});
+
 const AUTH_COOKIE = 'facturas_auth';
 const APP_PASSWORD = process.env.APP_PASSWORD || '';
 const AUTH_TOKEN = APP_PASSWORD
@@ -46,6 +55,10 @@ function isAuthed(req) {
 if (AUTH_TOKEN) {
   app.use((req, res, next) => {
     if (req.path === '/login' || req.path === '/logout') return next();
+    const ext = path.extname(req.path || '').toLowerCase();
+    if (ext && ['.css', '.js', '.map', '.png', '.jpg', '.jpeg', '.svg', '.ico', '.webp', '.woff', '.woff2', '.ttf', '.eot'].includes(ext)) {
+      return next();
+    }
     if (isAuthed(req)) return next();
     if (req.method === 'GET' || req.method === 'HEAD') return res.redirect('/login');
     return res.status(401).json({ error: 'unauthorized' });

@@ -505,3 +505,57 @@ ul {
   z-index: 9999;
   transition: opacity 0.3s ease;
 }
+
+body.login-page {
+  min-height: 100dvh;
+  padding: 0;
+  background: $background-color;
+  color: $text-color;
+}
+
+.login-container {
+  min-height: 100vh;
+  @include flex-center;
+  padding: $spacing-xl;
+}
+
+.login-card {
+  width: min(420px, 92vw);
+  background: $white;
+  border: 1px solid $border-color;
+  border-radius: $border-radius-lg;
+  padding: $spacing-xl;
+  box-shadow: 0 10px 30px rgba(16, 24, 40, 0.12);
+}
+
+.login-subtitle {
+  margin: $spacing-xs 0 $spacing-lg;
+  color: $text-light;
+}
+
+.login-label {
+  display: block;
+  font-size: 13px;
+  margin-bottom: $spacing-xs;
+  color: $text-color;
+  font-weight: 600;
+}
+
+.login-input {
+  width: 100%;
+  padding: $spacing-sm $spacing-md;
+  border: 1px solid $border-color;
+  border-radius: $border-radius;
+  font-size: 14px;
+  margin-bottom: $spacing-sm;
+
+  &:focus {
+    outline: none;
+    border-color: $primary-color;
+    box-shadow: 0 0 0 3px rgba(47, 111, 235, 0.1);
+  }
+}
+
+.login-btn {
+  width: 100%;
+}
