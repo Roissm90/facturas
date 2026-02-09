@@ -109,6 +109,30 @@ button {
   }
 }
 
+.upload-btn {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+
+  .text {
+    font-weight: 400;
+  }
+
+  > svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  @media (max-width: 767px) {
+    width: 100%;
+    justify-content: center;
+    
+    .text {
+      display: none;
+    }
+  }
+}
+
 // Año y mes
 .year {
   margin-top: $spacing-md;

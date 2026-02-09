@@ -50,6 +50,18 @@ function getFileExtension(filename) {
 // filesToUpload: array de objetos { file, originalName, baseName, extension, name (nombre base editable) }
 let filesToUpload = [];
 
+function setUploadButtonLabel(isLoading) {
+  if (!uploadBtn) return;
+  if (isLoading) {
+    uploadBtn.innerText = 'Subiendo...';
+  } else {
+    uploadBtn.innerHTML = '<i data-feather="upload"></i> <span class="text">Subir archivos</span>';
+    if (window.feather && typeof window.feather.replace === 'function') {
+      try { window.feather.replace(); } catch (e) { /* ignore */ }
+    }
+  }
+}
+
 function renderPreview() {
   preview.innerHTML = '';
   filesToUpload.forEach((f, i) => {
@@ -88,6 +100,7 @@ function renderPreview() {
     preview.appendChild(el);
   });
   uploadBtn.disabled = filesToUpload.length === 0;
+  if (filesToUpload.length > 0) setUploadButtonLabel(false);
 }
 
 drop.addEventListener('click', () => input.click());
@@ -169,7 +182,7 @@ async function modalConfirmUpload() {
     fd.append('files', fObj.file, finalName);
   });
   uploadBtn.disabled = true;
-  uploadBtn.innerText = 'Subiendo...';
+  setUploadButtonLabel(true);
   try {
     const resp = await fetch('/upload', { method: 'POST', body: fd });
     const data = await resp.json();
@@ -182,7 +195,7 @@ async function modalConfirmUpload() {
     result.innerText = 'Error al subir: ' + e.message;
   } finally {
     uploadBtn.disabled = false;
-    uploadBtn.innerText = 'Subir archivos';
+    setUploadButtonLabel(false);
   }
 }
 
@@ -466,3 +479,4 @@ if (invoiceDate) {
 
 // Cargar lista inicial
 fetchList();
+setUploadButtonLabel(false);
