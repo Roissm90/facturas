@@ -137,6 +137,17 @@ ul {
   margin-top: 0;
   margin-bottom: 12px;
 }
+.modal .modal-content .modal-error {
+  display: none;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid #fecaca;
+  background: #fee2e2;
+  color: #991b1b;
+  font-size: 14px;
+  font-weight: 600;
+}
 .modal .modal-date-field {
   margin-bottom: 16px;
   display: flex;

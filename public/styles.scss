@@ -190,6 +190,18 @@ ul {
       margin-top: 0;
       margin-bottom: $spacing-md;
     }
+
+    .modal-error {
+      display: none;
+      margin-bottom: $spacing-md;
+      padding: $spacing-sm $spacing-md;
+      border-radius: $border-radius;
+      border: 1px solid #fecaca;
+      background: #fee2e2;
+      color: #991b1b;
+      font-size: 14px;
+      font-weight: 600;
+    }
   }
 
   .modal-date-field {

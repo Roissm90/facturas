@@ -492,32 +492,42 @@ const baseCategoryHeaders = [
   'Otros gastos'
 ];
 
+const baseCategoryKeyMap = Object.fromEntries(
+  baseCategoryHeaders.map((header, index) => [header, `cat_${index}`])
+);
+
 function buildInvoiceRows(docs) {
   return docs.map((doc) => {
     const decryptedDate = decryptText(doc.invoiceDateEnc);
     const parsedDate = parseDateFlexible(decryptedDate) || doc.invoiceDateSort || doc.createdAt || null;
     const sortKey = buildSortKey(parsedDate);
     const displayDate = parsedDate ? formatDateDDMMYYYY(parsedDate) : formatDateDDMMYYYY(decryptedDate);
-    const categoryColumns = Object.fromEntries(baseCategoryHeaders.map((header) => [header, '']));
+    const categoryColumns = Object.fromEntries(
+      baseCategoryHeaders.map((header) => [baseCategoryKeyMap[header], ''])
+    );
     const selectedCategory = decryptText(doc.baseCategoryEnc);
-    if (selectedCategory && Object.prototype.hasOwnProperty.call(categoryColumns, selectedCategory)) {
-      categoryColumns[selectedCategory] = decryptText(doc.baseAmountEnc);
+    const categoryKey = baseCategoryKeyMap[selectedCategory];
+    if (categoryKey && Object.prototype.hasOwnProperty.call(categoryColumns, categoryKey)) {
+      categoryColumns[categoryKey] = decryptText(doc.baseAmountEnc);
     }
+
+    const storedName = doc.storedName || '';
+    const conceptName = storedName.replace(/\.[^/.]+$/, '').replace(/_/g, ' ');
 
     return {
       sortKey,
       row: {
-        'nº orden': '',
-        'fecha': displayDate,
-        'nº factura': decryptText(doc.invoiceNumberEnc),
-        'concepto': doc.storedName || '',
-        'NIF': decryptText(doc.nifEnc),
-        'razón social': decryptText(doc.legalNameEnc),
+        order: '',
+        date: displayDate,
+        invoiceNumber: decryptText(doc.invoiceNumberEnc),
+        concept: conceptName,
+        nif: decryptText(doc.nifEnc),
+        legalName: decryptText(doc.legalNameEnc),
         ...categoryColumns,
-        'tipo': decryptText(doc.vatRateEnc),
-        'IVA deducible': decryptText(doc.vatDeductibleEnc),
-        'IVA no deducible': decryptText(doc.vatNonDeductibleEnc),
-        'importe total': decryptText(doc.totalAmountEnc)
+        vatRate: decryptText(doc.vatRateEnc),
+        vatDeductible: decryptText(doc.vatDeductibleEnc),
+        vatNonDeductible: decryptText(doc.vatNonDeductibleEnc),
+        totalAmount: decryptText(doc.totalAmountEnc)
       }
     };
   });
@@ -525,20 +535,34 @@ function buildInvoiceRows(docs) {
 
 async function buildExcelBuffer(rows, sheetName) {
   const workbook = new ExcelJS.Workbook();
-  const headers = ['nº orden', 'fecha', 'nº factura', 'concepto', 'NIF', 'razón social', ...baseCategoryHeaders, 'tipo', 'IVA deducible', 'IVA no deducible', 'importe total'];
+  const columns = [
+    { header: 'Nº Orden', key: 'order' },
+    { header: 'Fecha', key: 'date' },
+    { header: 'Nº Factura', key: 'invoiceNumber' },
+    { header: 'Concepto', key: 'concept' },
+    { header: 'NIF', key: 'nif' },
+    { header: 'Razón Social', key: 'legalName' },
+    ...baseCategoryHeaders.map((header) => ({ header, key: baseCategoryKeyMap[header] })),
+    { header: 'Tipo', key: 'vatRate' },
+    { header: 'IVA deducible', key: 'vatDeductible' },
+    { header: 'IVA no deducible', key: 'vatNonDeductible' },
+    { header: 'Importe total', key: 'totalAmount' }
+  ];
+  const headers = columns.map((column) => column.header);
   const worksheet = workbook.addWorksheet(sheetName || 'Facturas');
+  worksheet.properties.defaultRowHeight = 42;
 
-  worksheet.columns = headers.map((header) => ({ header, key: header }));
+  worksheet.columns = columns;
   rows.forEach((row) => worksheet.addRow(row));
 
   const totals = rows.reduce(
     (acc, row) => {
       for (const category of baseCategoryHeaders) {
-        acc.category[category] += parseAmountToCents(row[category]) || 0;
+        acc.category[category] += parseAmountToCents(row[baseCategoryKeyMap[category]]) || 0;
       }
-      const ded = parseAmountToCents(row['IVA deducible']) || 0;
-      const nonDed = parseAmountToCents(row['IVA no deducible']) || 0;
-      const total = parseAmountToCents(row['importe total']) || 0;
+      const ded = parseAmountToCents(row.vatDeductible) || 0;
+      const nonDed = parseAmountToCents(row.vatNonDeductible) || 0;
+      const total = parseAmountToCents(row.totalAmount) || 0;
       return {
         category: acc.category,
         ded: acc.ded + ded,
@@ -554,13 +578,14 @@ async function buildExcelBuffer(rows, sheetName) {
     }
   );
 
-  const totalRowData = Object.fromEntries(headers.map((header) => [header, '']));
+  const totalRowData = Object.fromEntries(columns.map((column) => [column.key, '']));
+  totalRowData.order = 'Totales';
   for (const category of baseCategoryHeaders) {
-    totalRowData[category] = formatCentsToAmount(totals.category[category]);
+    totalRowData[baseCategoryKeyMap[category]] = formatCentsToAmount(totals.category[category]);
   }
-  totalRowData['IVA deducible'] = formatCentsToAmount(totals.ded);
-  totalRowData['IVA no deducible'] = formatCentsToAmount(totals.nonDed);
-  totalRowData['importe total'] = formatCentsToAmount(totals.total);
+  totalRowData.vatDeductible = formatCentsToAmount(totals.ded);
+  totalRowData.vatNonDeductible = formatCentsToAmount(totals.nonDed);
+  totalRowData.totalAmount = formatCentsToAmount(totals.total);
   const totalRow = worksheet.addRow(totalRowData);
 
   const headerRow = worksheet.getRow(1);
@@ -584,11 +609,13 @@ async function buildExcelBuffer(rows, sheetName) {
 
   const maxLengths = headers.map((header) => String(header).length);
   worksheet.eachRow((row) => {
+    row.height = 32;
     row.eachCell((cell, colNumber) => {
       const value = cell.value === null || cell.value === undefined ? '' : String(cell.value);
       if (value.length > maxLengths[colNumber - 1]) {
         maxLengths[colNumber - 1] = value.length;
       }
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
     });
   });
 
@@ -607,7 +634,7 @@ app.get('/export/year/:year', async (req, res) => {
       .sort((a, b) => a.sortKey - b.sortKey)
       .map((item, index) => ({
         ...item.row,
-        'nº orden': String(index + 1)
+        order: String(index + 1)
       }));
     const buffer = await buildExcelBuffer(rows, `Facturas ${year}`);
 

@@ -12,6 +12,7 @@ const renameModal = document.getElementById('rename-modal');
 const modalList = document.getElementById('modal-list');
 const modalCancel = document.getElementById('modal-cancel');
 const modalConfirm = document.getElementById('modal-confirm');
+const modalError = document.getElementById('modal-error');
 
 // Referencias a modales de filtrado
 const yearModal = document.getElementById('year-modal');
@@ -190,6 +191,7 @@ uploadBtn.addEventListener('click', () => {
     modalConfirmUpload();
     return;
   }
+  setModalError('');
   modalList.innerHTML = '';
   filesToUpload.forEach((fObj, i) => {
     const row = document.createElement('div');
@@ -368,17 +370,23 @@ uploadBtn.addEventListener('click', () => {
 });
 
 // Cancelar modal
-if (modalCancel) modalCancel.addEventListener('click', () => { renameModal.style.display = 'none'; });
+if (modalCancel) modalCancel.addEventListener('click', () => {
+  setModalError('');
+  renameModal.style.display = 'none';
+});
 
 // Confirmar y subir
-if (modalConfirm) modalConfirm.addEventListener('click', () => {
-  renameModal.style.display = 'none';
-  modalConfirmUpload();
+if (modalConfirm) modalConfirm.addEventListener('click', async () => {
+  const ok = await modalConfirmUpload();
+  if (ok) {
+    renameModal.style.display = 'none';
+    setModalError('');
+  }
 });
 
 async function modalConfirmUpload() {
   const fd = new FormData();
-  if (!validateInvoiceMeta()) return;
+  if (!validateInvoiceMeta()) return false;
   const meta = filesToUpload.map((fObj) => ({
     invoiceDate: fObj.invoiceDate || '',
     invoiceNumber: fObj.invoiceNumber || '',
@@ -399,16 +407,36 @@ async function modalConfirmUpload() {
   });
   uploadBtn.disabled = true;
   setUploadButtonLabel(true);
+  setModalError('');
   try {
     const resp = await fetch('/upload', { method: 'POST', body: fd });
-    const data = await resp.json();
+    let data = null;
+    try {
+      data = await resp.json();
+    } catch (e) {
+      data = null;
+    }
+
+    if (!resp.ok) {
+      const msg = data && data.error ? data.error : 'Error al subir las facturas';
+      setModalError(msg);
+      return false;
+    }
+
+    if (data && data.error) {
+      setModalError(data.error);
+      return false;
+    }
+
     result.innerText = JSON.stringify(data, null, 2);
     filesToUpload = [];
     renderPreview();
     // Recargar lista de archivos
     fetchList();
+    return true;
   } catch (e) {
-    result.innerText = 'Error al subir: ' + e.message;
+    setModalError('Error al subir las facturas');
+    return false;
   } finally {
     uploadBtn.disabled = filesToUpload.length === 0;
     setUploadButtonLabel(false);
@@ -417,44 +445,45 @@ async function modalConfirmUpload() {
 
 function validateInvoiceMeta() {
   for (const fObj of filesToUpload) {
+    const nameHint = fObj.name || fObj.baseName || fObj.originalName || 'archivo';
     if (!fObj.invoiceDate) {
-      showToast('Falta la fecha de factura');
+      setModalError(`Falta la fecha de factura en "${nameHint}"`);
       return false;
     }
     if (!fObj.invoiceNumber) {
-      showToast('Falta el nº de factura');
+      setModalError(`Falta el nº de factura en "${nameHint}"`);
       return false;
     }
     if (!fObj.nif) {
-      showToast('Falta el NIF');
+      setModalError(`Falta el NIF en "${nameHint}"`);
       return false;
     }
     if (!isValidNif(fObj.nif)) {
-      showToast('El NIF solo puede contener letras y numeros');
+      setModalError(`El NIF solo puede contener letras y numeros en "${nameHint}"`);
       return false;
     }
     if (!fObj.razonSocial) {
-      showToast('Falta la razon social');
+      setModalError(`Falta la razon social en "${nameHint}"`);
       return false;
     }
     if (!isValidLegalName(fObj.razonSocial)) {
-      showToast('La razon social solo puede contener letras');
+      setModalError(`La razon social solo puede contener letras en "${nameHint}"`);
       return false;
     }
     if (!fObj.baseCategory) {
-      showToast('Falta la categoria de base imponible');
+      setModalError(`Falta la categoria de base imponible en "${nameHint}"`);
       return false;
     }
     if (!fObj.baseAmount) {
-      showToast('Falta la base imponible');
+      setModalError(`Falta la base imponible en "${nameHint}"`);
       return false;
     }
     if (!fObj.vatRate) {
-      showToast('Falta el tipo de IVA');
+      setModalError(`Falta el tipo de IVA en "${nameHint}"`);
       return false;
     }
     if (!fObj.totalAmount) {
-      showToast('Falta el importe total');
+      setModalError(`Falta el importe total en "${nameHint}"`);
       return false;
     }
 
@@ -464,17 +493,31 @@ function validateInvoiceMeta() {
     const totalCents = parseAmountToCents(fObj.totalAmount);
 
     if (baseCents === null || totalCents === null || dedCents === null || nonDedCents === null) {
-      showToast('Formato numerico invalido en importes');
+      setModalError(`Formato numerico invalido en importes de "${nameHint}"`);
       return false;
     }
 
     const sumCents = baseCents + dedCents + nonDedCents;
     if (sumCents !== totalCents) {
-      showToast('La suma de base + IVA deducible + IVA no deducible debe igualar el total');
+      setModalError(`La suma de base + IVA deducible + IVA no deducible debe igualar el total en "${nameHint}"`);
       return false;
     }
   }
   return true;
+}
+
+function setModalError(message) {
+  if (!modalError) {
+    if (message) showToast(message);
+    return;
+  }
+  if (!message) {
+    modalError.innerText = '';
+    modalError.style.display = 'none';
+    return;
+  }
+  modalError.innerText = message;
+  modalError.style.display = 'block';
 }
 
 function isValidNif(value) {
