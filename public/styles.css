@@ -269,6 +269,11 @@ ul {
   flex-direction: column;
   width: calc(100% - 36px);
 }
+.file-row .rename-field > label {
+  font-weight: 600;
+  color: #172b4d;
+  font-size: 14px;
+}
 .file-row .rename-field .rename-input {
   padding: 6px;
   border: 1px solid #e6eaf8;
@@ -289,6 +294,14 @@ ul {
   font-weight: 600;
   color: #172b4d;
   font-size: 14px;
+}
+.file-row .invoice-fields .invoice-field select {
+  font-weight: 600;
+  color: #172b4d;
+  font-size: 14px;
+  padding: 8px 12px;
+  border: 1px solid #e6eaf8;
+  border-radius: 6px;
 }
 .file-row .invoice-fields .invoice-field input {
   padding: 6px;
