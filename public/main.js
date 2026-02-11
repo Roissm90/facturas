@@ -127,6 +127,8 @@ drop.addEventListener('drop', (e) => {
       name: baseName,
       invoiceDate: getTodayDateString(),
       invoiceNumber: '',
+      nif: '',
+      razonSocial: '',
       baseAmount: '',
       vatRate: '',
       vatDeductible: '',
@@ -149,6 +151,8 @@ input.addEventListener('change', (e) => {
       name: baseName,
       invoiceDate: getTodayDateString(),
       invoiceNumber: '',
+      nif: '',
+      razonSocial: '',
       baseAmount: '',
       vatRate: '',
       vatDeductible: '',
@@ -180,7 +184,7 @@ uploadBtn.addEventListener('click', () => {
     const renameField = document.createElement('div');
     renameField.className = 'rename-field';
     const renameLabel = document.createElement('label');
-    renameLabel.innerText = 'Nombre de factura';
+    renameLabel.innerText = 'Concepto';
     const inp = document.createElement('input');
     inp.className = 'rename-input';
     inp.value = fObj.name || fObj.baseName;
@@ -220,6 +224,32 @@ uploadBtn.addEventListener('click', () => {
     numberInput.oninput = (e) => { fObj.invoiceNumber = e.target.value; };
     numberField.appendChild(numberLabel);
     numberField.appendChild(numberInput);
+
+    const nifField = document.createElement('div');
+    nifField.className = 'invoice-field';
+    const nifLabel = document.createElement('label');
+    nifLabel.innerText = 'NIF';
+    const nifInput = document.createElement('input');
+    nifInput.type = 'text';
+    nifInput.value = fObj.nif || '';
+    nifInput.placeholder = 'Ej: B12345678';
+    nifInput.required = true;
+    nifInput.oninput = (e) => { fObj.nif = e.target.value; };
+    nifField.appendChild(nifLabel);
+    nifField.appendChild(nifInput);
+
+    const legalNameField = document.createElement('div');
+    legalNameField.className = 'invoice-field';
+    const legalNameLabel = document.createElement('label');
+    legalNameLabel.innerText = 'Razón Social';
+    const legalNameInput = document.createElement('input');
+    legalNameInput.type = 'text';
+    legalNameInput.value = fObj.razonSocial || '';
+    legalNameInput.placeholder = 'Ej: Empresa Ejemplo';
+    legalNameInput.required = true;
+    legalNameInput.oninput = (e) => { fObj.razonSocial = e.target.value; };
+    legalNameField.appendChild(legalNameLabel);
+    legalNameField.appendChild(legalNameInput);
 
     const baseField = document.createElement('div');
     baseField.className = 'invoice-field';
@@ -287,6 +317,8 @@ uploadBtn.addEventListener('click', () => {
 
     fields.appendChild(dateField);
     fields.appendChild(numberField);
+    fields.appendChild(nifField);
+    fields.appendChild(legalNameField);
     fields.appendChild(baseField);
     fields.appendChild(vatField);
     fields.appendChild(dedField);
@@ -317,6 +349,8 @@ async function modalConfirmUpload() {
   const meta = filesToUpload.map((fObj) => ({
     invoiceDate: fObj.invoiceDate || '',
     invoiceNumber: fObj.invoiceNumber || '',
+    nif: fObj.nif || '',
+    razonSocial: fObj.razonSocial || '',
     baseAmount: fObj.baseAmount || '',
     vatRate: fObj.vatRate || '',
     vatDeductible: fObj.vatDeductible || '',
@@ -357,6 +391,22 @@ function validateInvoiceMeta() {
       showToast('Falta el nº de factura');
       return false;
     }
+    if (!fObj.nif) {
+      showToast('Falta el NIF');
+      return false;
+    }
+    if (!isValidNif(fObj.nif)) {
+      showToast('El NIF solo puede contener letras y numeros');
+      return false;
+    }
+    if (!fObj.razonSocial) {
+      showToast('Falta la razon social');
+      return false;
+    }
+    if (!isValidLegalName(fObj.razonSocial)) {
+      showToast('La razon social solo puede contener letras');
+      return false;
+    }
     if (!fObj.baseAmount) {
       showToast('Falta la base imponible');
       return false;
@@ -387,6 +437,14 @@ function validateInvoiceMeta() {
     }
   }
   return true;
+}
+
+function isValidNif(value) {
+  return /^[A-Za-z0-9]+$/.test(String(value).trim());
+}
+
+function isValidLegalName(value) {
+  return /^[A-Za-zÁÉÍÓÚÑÜáéíóúñü\s]+$/.test(String(value).trim());
 }
 
 function parseAmountToCents(value) {

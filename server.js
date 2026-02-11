@@ -114,6 +114,8 @@ const invoiceSchema = new mongoose.Schema({
   version: Number,
   invoiceDateEnc: String,
   invoiceNumberEnc: String,
+  nifEnc: String,
+  legalNameEnc: String,
   baseAmountEnc: String,
   vatRateEnc: String,
   vatDeductibleEnc: String,
@@ -324,6 +326,8 @@ app.post('/upload', upload.array('files'), async (req, res) => {
         version: uploadResult.version,
         invoiceDateEnc: encryptText(invoiceDateRaw),
         invoiceNumberEnc: encryptText(meta.invoiceNumber),
+        nifEnc: encryptText(meta.nif),
+        legalNameEnc: encryptText(meta.razonSocial),
         baseAmountEnc: encryptText(meta.baseAmount),
         vatRateEnc: encryptText(meta.vatRate),
         vatDeductibleEnc: encryptText(meta.vatDeductible),
@@ -479,9 +483,12 @@ function buildInvoiceRows(docs) {
     return {
       sortKey,
       row: {
+        'nº orden': '',
         'fecha': displayDate,
         'nº factura': decryptText(doc.invoiceNumberEnc),
-        'nombre': doc.storedName || '',
+        'concepto': doc.storedName || '',
+        'NIF': decryptText(doc.nifEnc),
+        'razón social': decryptText(doc.legalNameEnc),
         'base imponible': decryptText(doc.baseAmountEnc),
         'tipo': decryptText(doc.vatRateEnc),
         'IVA deducible': decryptText(doc.vatDeductibleEnc),
@@ -494,7 +501,7 @@ function buildInvoiceRows(docs) {
 
 function buildExcelBuffer(rows, sheetName) {
   const workbook = XLSX.utils.book_new();
-  const headers = ['fecha', 'nº factura', 'nombre', 'base imponible', 'tipo', 'IVA deducible', 'IVA no deducible', 'importe total'];
+  const headers = ['nº orden', 'fecha', 'nº factura', 'concepto', 'NIF', 'razón social', 'base imponible', 'tipo', 'IVA deducible', 'IVA no deducible', 'importe total'];
   const worksheet = rows.length
     ? XLSX.utils.json_to_sheet(rows, { header: headers })
     : XLSX.utils.aoa_to_sheet([headers]);
@@ -516,15 +523,12 @@ function buildExcelBuffer(rows, sheetName) {
   );
 
   const totalRow = [
-    '',
-    '',
-    '',
-    formatCentsToAmount(totals.base),
-    '',
-    formatCentsToAmount(totals.ded),
-    formatCentsToAmount(totals.nonDed),
-    formatCentsToAmount(totals.total)
+    ...headers.map(() => '')
   ];
+  totalRow[headers.indexOf('base imponible')] = formatCentsToAmount(totals.base);
+  totalRow[headers.indexOf('IVA deducible')] = formatCentsToAmount(totals.ded);
+  totalRow[headers.indexOf('IVA no deducible')] = formatCentsToAmount(totals.nonDed);
+  totalRow[headers.indexOf('importe total')] = formatCentsToAmount(totals.total);
 
   XLSX.utils.sheet_add_aoa(worksheet, [totalRow], { origin: -1 });
 
@@ -538,7 +542,10 @@ app.get('/export/year/:year', async (req, res) => {
     const docs = await Invoice.find({ year }).lean();
     const rows = buildInvoiceRows(docs)
       .sort((a, b) => a.sortKey - b.sortKey)
-      .map((item) => item.row);
+      .map((item, index) => ({
+        ...item.row,
+        'nº orden': String(index + 1)
+      }));
     const buffer = buildExcelBuffer(rows, `Facturas ${year}`);
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
