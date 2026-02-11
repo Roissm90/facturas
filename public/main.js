@@ -4,6 +4,7 @@ const preview = document.getElementById('preview');
 const uploadBtn = document.getElementById('upload-btn');
 const result = document.getElementById('result');
 const resultIncome = document.getElementById('resultIncome');
+const incomeTitle = document.getElementById('income-title');
 
 // Nombres de meses en español (índice 0 = enero)
 const monthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -14,6 +15,13 @@ const modalList = document.getElementById('modal-list');
 const modalCancel = document.getElementById('modal-cancel');
 const modalConfirm = document.getElementById('modal-confirm');
 const modalError = document.getElementById('modal-error');
+
+// Referencias al modal de edicion
+const editModal = document.getElementById('edit-modal');
+const editModalList = document.getElementById('edit-modal-list');
+const editModalCancel = document.getElementById('edit-modal-cancel');
+const editModalConfirm = document.getElementById('edit-modal-confirm');
+const editModalError = document.getElementById('edit-modal-error');
 
 // Referencias a modales de filtrado
 const yearModal = document.getElementById('year-modal');
@@ -28,6 +36,7 @@ let selectedYear = null;
 let selectedMonth = null;
 let allTree = {}; // árbol completo de archivos
 let incomeRequestId = 0;
+let editInvoice = null;
 
 // Referencias modal de borrado
 const deleteModal = document.getElementById('delete-modal');
@@ -522,6 +531,320 @@ function setModalError(message) {
   modalError.style.display = 'block';
 }
 
+function setEditModalError(message) {
+  if (!editModalError) {
+    if (message) showToast(message);
+    return;
+  }
+  if (!message) {
+    editModalError.innerText = '';
+    editModalError.style.display = 'none';
+    return;
+  }
+  editModalError.innerText = message;
+  editModalError.style.display = 'block';
+}
+
+function validateEditMeta(data) {
+  const nameHint = data && data.storedName ? data.storedName : 'factura';
+  if (!data.invoiceDate) {
+    setEditModalError(`Falta la fecha de factura en "${nameHint}"`);
+    return false;
+  }
+  if (!data.invoiceNumber) {
+    setEditModalError(`Falta el nº de factura en "${nameHint}"`);
+    return false;
+  }
+  if (!data.nif) {
+    setEditModalError(`Falta el NIF en "${nameHint}"`);
+    return false;
+  }
+  if (!isValidNif(data.nif)) {
+    setEditModalError(`El NIF solo puede contener letras y numeros en "${nameHint}"`);
+    return false;
+  }
+  if (!data.razonSocial) {
+    setEditModalError(`Falta la razon social en "${nameHint}"`);
+    return false;
+  }
+  if (!isValidLegalName(data.razonSocial)) {
+    setEditModalError(`La razon social solo puede contener letras en "${nameHint}"`);
+    return false;
+  }
+  if (!data.baseCategory) {
+    setEditModalError(`Falta la categoria de base imponible en "${nameHint}"`);
+    return false;
+  }
+  if (!data.baseAmount) {
+    setEditModalError(`Falta la base imponible en "${nameHint}"`);
+    return false;
+  }
+  if (!data.vatRate) {
+    setEditModalError(`Falta el tipo de IVA en "${nameHint}"`);
+    return false;
+  }
+  if (!data.totalAmount) {
+    setEditModalError(`Falta el importe total en "${nameHint}"`);
+    return false;
+  }
+
+  const baseCents = parseAmountToCents(data.baseAmount);
+  const dedCents = parseAmountToCents(data.vatDeductible || '0') || 0;
+  const nonDedCents = parseAmountToCents(data.vatNonDeductible || '0') || 0;
+  const totalCents = parseAmountToCents(data.totalAmount);
+
+  if (baseCents === null || totalCents === null || dedCents === null || nonDedCents === null) {
+    setEditModalError(`Formato numerico invalido en importes de "${nameHint}"`);
+    return false;
+  }
+
+  const sumCents = baseCents + dedCents + nonDedCents;
+  if (sumCents !== totalCents) {
+    setEditModalError(`La suma de base + IVA deducible + IVA no deducible debe igualar el total en "${nameHint}"`);
+    return false;
+  }
+
+  return true;
+}
+
+async function fetchInvoiceDetails(id) {
+  if (!id) return null;
+  try {
+    console.log('Fetching invoice details for ID:', id);
+    const resp = await fetch(`/invoice/${id}`);
+    console.log('Response status:', resp.status);
+    if (!resp.ok) {
+      const errorData = await resp.json().catch(() => ({}));
+      console.error('Failed to fetch invoice:', resp.status, errorData);
+      throw new Error('invoice fetch failed');
+    }
+    const data = await resp.json();
+    console.log('Invoice data received:', data);
+    return data;
+  } catch (e) {
+    console.error('fetchInvoiceDetails error:', e);
+    return null;
+  }
+}
+
+async function updateInvoice(id, payload) {
+  if (!id) return false;
+  try {
+    const resp = await fetch(`/invoice/${id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!resp.ok) throw new Error('invoice update failed');
+    return true;
+  } catch (e) {
+    console.error(e);
+    return false;
+  }
+}
+
+function buildEditModal(invoice) {
+  if (!editModalList) return;
+  editModalList.innerHTML = '';
+
+  const row = document.createElement('div');
+  row.className = 'file-row';
+
+  const renameField = document.createElement('div');
+  renameField.className = 'rename-field';
+  const renameLabel = document.createElement('label');
+  renameLabel.innerText = 'Concepto';
+  const nameInput = document.createElement('input');
+  nameInput.className = 'rename-input';
+  nameInput.value = invoice.baseName || '';
+  nameInput.placeholder = 'Nombre (sin extensión)';
+  nameInput.oninput = (e) => { invoice.baseName = e.target.value; };
+  renameField.appendChild(renameLabel);
+  renameField.appendChild(nameInput);
+
+  const ext = document.createElement('div');
+  ext.className = 'file-row__extension';
+  ext.innerText = invoice.extension || '';
+
+  const fields = document.createElement('div');
+  fields.className = 'invoice-fields';
+
+  const dateField = document.createElement('div');
+  dateField.className = 'invoice-field';
+  const dateLabel = document.createElement('label');
+  dateLabel.innerText = 'Fecha factura';
+  const dateInput = document.createElement('input');
+  dateInput.type = 'date';
+  dateInput.value = invoice.invoiceDate || '';
+  dateInput.required = true;
+  dateInput.oninput = (e) => { invoice.invoiceDate = e.target.value; };
+  dateField.appendChild(dateLabel);
+  dateField.appendChild(dateInput);
+
+  const numberField = document.createElement('div');
+  numberField.className = 'invoice-field';
+  const numberLabel = document.createElement('label');
+  numberLabel.innerText = 'Nº factura';
+  const numberInput = document.createElement('input');
+  numberInput.type = 'text';
+  numberInput.value = invoice.invoiceNumber || '';
+  numberInput.placeholder = 'Ej: F-2026-001';
+  numberInput.required = true;
+  numberInput.oninput = (e) => { invoice.invoiceNumber = e.target.value; };
+  numberField.appendChild(numberLabel);
+  numberField.appendChild(numberInput);
+
+  const nifField = document.createElement('div');
+  nifField.className = 'invoice-field';
+  const nifLabel = document.createElement('label');
+  nifLabel.innerText = 'NIF';
+  const nifInput = document.createElement('input');
+  nifInput.type = 'text';
+  nifInput.value = invoice.nif || '';
+  nifInput.placeholder = 'Ej: B12345678';
+  nifInput.required = true;
+  nifInput.oninput = (e) => { invoice.nif = e.target.value; };
+  nifField.appendChild(nifLabel);
+  nifField.appendChild(nifInput);
+
+  const legalNameField = document.createElement('div');
+  legalNameField.className = 'invoice-field';
+  const legalNameLabel = document.createElement('label');
+  legalNameLabel.innerText = 'Razón Social';
+  const legalNameInput = document.createElement('input');
+  legalNameInput.type = 'text';
+  legalNameInput.value = invoice.razonSocial || '';
+  legalNameInput.placeholder = 'Ej: Empresa Ejemplo';
+  legalNameInput.required = true;
+  legalNameInput.oninput = (e) => { invoice.razonSocial = e.target.value; };
+  legalNameField.appendChild(legalNameLabel);
+  legalNameField.appendChild(legalNameInput);
+
+  const baseField = document.createElement('div');
+  baseField.className = 'invoice-field';
+  const baseLabel = document.createElement('label');
+  baseLabel.innerText = 'Base imponible';
+  const baseSelect = document.createElement('select');
+  baseSelect.value = invoice.baseCategory || '';
+  baseSelect.required = true;
+  const baseSelectPlaceholder = document.createElement('option');
+  baseSelectPlaceholder.value = '';
+  baseSelectPlaceholder.innerText = 'Selecciona categoria';
+  baseSelect.appendChild(baseSelectPlaceholder);
+  baseCategoryOptions.forEach((optionLabel) => {
+    const option = document.createElement('option');
+    option.value = optionLabel;
+    option.innerText = optionLabel;
+    baseSelect.appendChild(option);
+  });
+  baseSelect.value = invoice.baseCategory || '';
+  baseSelect.oninput = (e) => { invoice.baseCategory = e.target.value; };
+  const baseInput = document.createElement('input');
+  baseInput.type = 'text';
+  baseInput.value = invoice.baseAmount || '';
+  baseInput.placeholder = 'Ej: 1200,50';
+  baseInput.required = true;
+  baseInput.oninput = (e) => { invoice.baseAmount = e.target.value; };
+  baseField.appendChild(baseLabel);
+  baseField.appendChild(baseSelect);
+  baseField.appendChild(baseInput);
+
+  const vatField = document.createElement('div');
+  vatField.className = 'invoice-field';
+  const vatLabel = document.createElement('label');
+  vatLabel.innerText = 'Tipo IVA';
+  const vatInput = document.createElement('input');
+  vatInput.type = 'text';
+  vatInput.inputMode = 'decimal';
+  vatInput.value = invoice.vatRate || '';
+  vatInput.placeholder = 'Ej: 21';
+  vatInput.required = true;
+  vatInput.oninput = (e) => { invoice.vatRate = e.target.value; };
+  vatField.appendChild(vatLabel);
+  vatField.appendChild(vatInput);
+
+  const dedField = document.createElement('div');
+  dedField.className = 'invoice-field';
+  const dedLabel = document.createElement('label');
+  dedLabel.innerText = 'IVA deducible';
+  const dedInput = document.createElement('input');
+  dedInput.type = 'text';
+  dedInput.value = invoice.vatDeductible || '';
+  dedInput.placeholder = 'Opcional';
+  dedInput.oninput = (e) => { invoice.vatDeductible = e.target.value; };
+  dedField.appendChild(dedLabel);
+  dedField.appendChild(dedInput);
+
+  const nonDedField = document.createElement('div');
+  nonDedField.className = 'invoice-field';
+  const nonDedLabel = document.createElement('label');
+  nonDedLabel.innerText = 'IVA no deducible';
+  const nonDedInput = document.createElement('input');
+  nonDedInput.type = 'text';
+  nonDedInput.value = invoice.vatNonDeductible || '';
+  nonDedInput.placeholder = 'Opcional';
+  nonDedInput.oninput = (e) => { invoice.vatNonDeductible = e.target.value; };
+  nonDedField.appendChild(nonDedLabel);
+  nonDedField.appendChild(nonDedInput);
+
+  const totalField = document.createElement('div');
+  totalField.className = 'invoice-field';
+  const totalLabel = document.createElement('label');
+  totalLabel.innerText = 'Importe total';
+  const totalInput = document.createElement('input');
+  totalInput.type = 'text';
+  totalInput.value = invoice.totalAmount || '';
+  totalInput.placeholder = 'Ej: 1452,61';
+  totalInput.required = true;
+  totalInput.oninput = (e) => { invoice.totalAmount = e.target.value; };
+  totalField.appendChild(totalLabel);
+  totalField.appendChild(totalInput);
+
+  fields.appendChild(dateField);
+  fields.appendChild(numberField);
+  fields.appendChild(nifField);
+  fields.appendChild(legalNameField);
+  fields.appendChild(baseField);
+  fields.appendChild(vatField);
+  fields.appendChild(dedField);
+  fields.appendChild(nonDedField);
+  fields.appendChild(totalField);
+
+  row.appendChild(renameField);
+  row.appendChild(ext);
+  row.appendChild(fields);
+  editModalList.appendChild(row);
+}
+
+async function openEditModal(id) {
+  setEditModalError('');
+  const invoice = await fetchInvoiceDetails(id);
+  if (!invoice) {
+    showToast('No se pudo cargar la factura');
+    return;
+  }
+  const storedName = invoice.storedName || '';
+  const { baseName, extension } = getFileExtension(storedName);
+  editInvoice = {
+    id: invoice.id,
+    storedName,
+    baseName,
+    extension,
+    invoiceDate: invoice.invoiceDate || '',
+    invoiceNumber: invoice.invoiceNumber || '',
+    nif: invoice.nif || '',
+    razonSocial: invoice.legalName || '',
+    baseCategory: invoice.baseCategory || '',
+    baseAmount: invoice.baseAmount || '',
+    vatRate: invoice.vatRate || '',
+    vatDeductible: invoice.vatDeductible || '',
+    vatNonDeductible: invoice.vatNonDeductible || '',
+    totalAmount: invoice.totalAmount || ''
+  };
+  buildEditModal(editInvoice);
+  if (editModal) editModal.style.display = 'flex';
+}
+
 function isValidNif(value) {
   return /^[A-Za-z0-9]+$/.test(String(value).trim());
 }
@@ -801,6 +1124,7 @@ async function renderIncomePanel() {
   resultIncome.innerHTML = '';
 
   if (!selectedYear) {
+    if (incomeTitle) incomeTitle.style.display = 'block';
     const msg = document.createElement('p');
     msg.className = 'no-data';
     msg.innerText = 'Selecciona un año para ver ingresos y gastos.';
@@ -808,7 +1132,12 @@ async function renderIncomePanel() {
     return;
   }
 
-  if (selectedMonth) return;
+  if (selectedMonth) {
+    if (incomeTitle) incomeTitle.style.display = 'none';
+    return;
+  }
+
+  if (incomeTitle) incomeTitle.style.display = 'block';
 
   const loading = document.createElement('p');
   loading.className = 'loading';
@@ -977,6 +1306,16 @@ function renderList() {
         a.innerText = f.name;
         a.target = '_blank';
         li.appendChild(a);
+        // boton editar
+        const editBtn = document.createElement('button');
+        editBtn.className = 'file-item__edit-btn';
+        editBtn.type = 'button';
+        editBtn.title = 'Editar factura';
+        editBtn.innerHTML = '<i data-feather="edit-2"></i>';
+        editBtn.addEventListener('click', () => {
+          openEditModal(f.id);
+        });
+        li.appendChild(editBtn);
         // botón borrar junto al enlace
         const delBtn = document.createElement('button');
         delBtn.className = 'file-item__delete-btn';
@@ -1117,6 +1456,48 @@ async function downloadExcel(btn, url, filename) {
       if (downloadModal) downloadModal.style.display = 'none';
       pendingDeleteYear = null;
     }
+  });
+
+  if (editModalCancel) editModalCancel.addEventListener('click', () => {
+    if (editModal) editModal.style.display = 'none';
+    setEditModalError('');
+    editInvoice = null;
+  });
+
+  if (editModalConfirm) editModalConfirm.addEventListener('click', async () => {
+    if (!editInvoice) return;
+    setEditModalError('');
+    const baseName = (editInvoice.baseName || '').trim();
+    if (!baseName) {
+      setEditModalError('Falta el concepto de la factura');
+      return;
+    }
+
+    const payload = {
+      storedName: `${baseName}${editInvoice.extension || ''}`,
+      invoiceDate: editInvoice.invoiceDate || '',
+      invoiceNumber: editInvoice.invoiceNumber || '',
+      nif: editInvoice.nif || '',
+      legalName: editInvoice.razonSocial || '',
+      baseCategory: editInvoice.baseCategory || '',
+      baseAmount: editInvoice.baseAmount || '',
+      vatRate: editInvoice.vatRate || '',
+      vatDeductible: editInvoice.vatDeductible || '',
+      vatNonDeductible: editInvoice.vatNonDeductible || '',
+      totalAmount: editInvoice.totalAmount || ''
+    };
+
+    if (!validateEditMeta({ ...editInvoice, storedName: payload.storedName })) return;
+
+    const ok = await updateInvoice(editInvoice.id, payload);
+    if (!ok) {
+      setEditModalError('No se pudo guardar la factura');
+      return;
+    }
+
+    if (editModal) editModal.style.display = 'none';
+    editInvoice = null;
+    fetchList();
   });
 
 // Toast helper

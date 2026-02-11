@@ -192,6 +192,7 @@ ul {
 .income-cell {
   font-size: 14px;
   color: $text-color;
+  text-align: center;
 }
 
 .income-cell--label {
@@ -659,6 +660,31 @@ ul {
                             height: 18px;
                             stroke: #ef4444;
                             fill: none;
+                        }
+                    }
+
+                    .file-item__edit-btn {
+                        min-width: 18px;
+                        min-height: 18px;
+                        border: none;
+                        color: #fff;
+                        padding: 0;
+                        border-radius: $border-radius;
+                        cursor: pointer;
+                        background-color: transparent;
+                        order: -1;
+                        margin-left: auto;
+                        margin-right: 16px;
+
+                        &:hover {
+                          opacity: 0.9;
+                        }
+
+                        svg {
+                          width: 18px;
+                          height: 18px;
+                          stroke: $primary-color;
+                          fill: none;
                         }
                     }
                 }

@@ -21,7 +21,7 @@
       <h2 class="subtitle-page" style="margin-top: 12px;">Facturas</h2>
       <div id="result" class="result"></div>
 
-      <h2 class="subtitle-page" style="margin-top: 12px;">Tabla Ingresos Netos</h2>
+      <h2 id="income-title" class="subtitle-page" style="margin-top: 12px;">Ingresos netos</h2>
       <div id="resultIncome" class="result-income"></div>
     </div>
 
@@ -36,6 +36,19 @@
         <div class="modal-actions">
           <button id="modal-cancel">Cancelar</button>
           <button id="modal-confirm">Confirmar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal para editar factura -->
+    <div id="edit-modal" class="modal" style="display:none">
+      <div class="modal-content">
+        <h3>Editar factura</h3>
+        <div id="edit-modal-error" class="modal-error" role="alert"></div>
+        <div id="edit-modal-list"></div>
+        <div class="modal-actions">
+          <button id="edit-modal-cancel">Cancelar</button>
+          <button id="edit-modal-confirm">Guardar cambios</button>
         </div>
       </div>
     </div>

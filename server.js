@@ -257,6 +257,20 @@ function formatDateDDMMYYYY(value) {
   return `${d}/${m}/${y}`;
 }
 
+function formatDateYYYYMMDD(value) {
+  if (!value) return '';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '';
+  const d = String(parsed.getDate()).padStart(2, '0');
+  const m = String(parsed.getMonth() + 1).padStart(2, '0');
+  const y = parsed.getFullYear();
+  return `${y}-${m}-${d}`;
+}
+
+function sanitizeFilename(name) {
+  return String(name || '').replace(/[^a-zA-Z0-9._-]/g, '_');
+}
+
 function parseAmountToCents(value) {
   if (value === null || value === undefined) return null;
   const trimmed = String(value).trim();
@@ -479,6 +493,89 @@ app.get('/view/:id', async (req, res) => {
   } catch (e) {
     console.error('view error', e);
     return res.status(500).send('internal');
+  }
+});
+
+app.get('/invoice/:id', async (req, res) => {
+  try {
+    console.log('Fetching invoice with ID:', req.params.id);
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      console.log('Invalid ObjectId format');
+      return res.status(400).json({ error: 'invalid id format' });
+    }
+
+    const doc = await Invoice.findById(req.params.id).lean();
+    if (!doc) {
+      console.log('Invoice not found');
+      return res.status(404).json({ error: 'not found' });
+    }
+
+    const rawDate = decryptText(doc.invoiceDateEnc);
+    const parsedDate = parseDateInput(rawDate) || parseDateFlexible(rawDate) || doc.invoiceDateSort || null;
+    const invoiceDate = parsedDate ? formatDateYYYYMMDD(parsedDate) : '';
+
+    console.log('Invoice found, returning data');
+    return res.json({
+      id: String(doc._id),
+      storedName: doc.storedName || '',
+      invoiceDate,
+      invoiceNumber: decryptText(doc.invoiceNumberEnc),
+      nif: decryptText(doc.nifEnc),
+      legalName: decryptText(doc.legalNameEnc),
+      baseCategory: decryptText(doc.baseCategoryEnc),
+      baseAmount: decryptText(doc.baseAmountEnc),
+      vatRate: decryptText(doc.vatRateEnc),
+      vatDeductible: decryptText(doc.vatDeductibleEnc),
+      vatNonDeductible: decryptText(doc.vatNonDeductibleEnc),
+      totalAmount: decryptText(doc.totalAmountEnc)
+    });
+  } catch (e) {
+    console.error('invoice fetch error', e);
+    return res.status(500).json({ error: 'internal' });
+  }
+});
+
+app.post('/invoice/:id', async (req, res) => {
+  try {
+    const doc = await Invoice.findById(req.params.id);
+    if (!doc) return res.status(404).json({ success: false, error: 'not found' });
+
+    const storedName = req.body && req.body.storedName ? sanitizeFilename(req.body.storedName) : doc.storedName;
+    const invoiceDateRaw = req.body && req.body.invoiceDate ? String(req.body.invoiceDate) : '';
+    const invoiceNumber = req.body && req.body.invoiceNumber ? String(req.body.invoiceNumber) : '';
+    const nif = req.body && req.body.nif ? String(req.body.nif) : '';
+    const legalName = req.body && req.body.legalName ? String(req.body.legalName) : '';
+    const baseCategory = req.body && req.body.baseCategory ? String(req.body.baseCategory) : '';
+    const baseAmount = req.body && req.body.baseAmount ? String(req.body.baseAmount) : '';
+    const vatRate = req.body && req.body.vatRate ? String(req.body.vatRate) : '';
+    const vatDeductible = req.body && req.body.vatDeductible ? String(req.body.vatDeductible) : '';
+    const vatNonDeductible = req.body && req.body.vatNonDeductible ? String(req.body.vatNonDeductible) : '';
+    const totalAmount = req.body && req.body.totalAmount ? String(req.body.totalAmount) : '';
+
+    doc.storedName = storedName;
+    doc.invoiceDateEnc = encryptText(invoiceDateRaw);
+    doc.invoiceNumberEnc = encryptText(invoiceNumber);
+    doc.nifEnc = encryptText(nif);
+    doc.legalNameEnc = encryptText(legalName);
+    doc.baseCategoryEnc = encryptText(baseCategory);
+    doc.baseAmountEnc = encryptText(baseAmount);
+    doc.vatRateEnc = encryptText(vatRate);
+    doc.vatDeductibleEnc = encryptText(vatDeductible);
+    doc.vatNonDeductibleEnc = encryptText(vatNonDeductible);
+    doc.totalAmountEnc = encryptText(totalAmount);
+
+    const parsedDate = parseDateInput(invoiceDateRaw) || parseDateFlexible(invoiceDateRaw);
+    if (parsedDate) {
+      doc.invoiceDateSort = parsedDate;
+      doc.year = String(parsedDate.getFullYear());
+      doc.month = String(parsedDate.getMonth() + 1).padStart(2, '0');
+    }
+
+    await doc.save();
+    return res.json({ success: true });
+  } catch (e) {
+    console.error('invoice update error', e);
+    return res.status(500).json({ success: false, error: 'internal' });
   }
 });
 

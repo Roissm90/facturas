@@ -140,6 +140,7 @@ ul {
 .income-cell {
   font-size: 14px;
   color: #172b4d;
+  text-align: center;
 }
 
 .income-cell--label {
@@ -558,6 +559,28 @@ ul {
   width: 18px;
   height: 18px;
   stroke: #ef4444;
+  fill: none;
+}
+.result .files-container .files-list-container .files-list__items .file-item .file-item__edit-btn {
+  min-width: 18px;
+  min-height: 18px;
+  border: none;
+  color: #fff;
+  padding: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  background-color: transparent;
+  order: -1;
+  margin-left: auto;
+  margin-right: 16px;
+}
+.result .files-container .files-list-container .files-list__items .file-item .file-item__edit-btn:hover {
+  opacity: 0.9;
+}
+.result .files-container .files-list-container .files-list__items .file-item .file-item__edit-btn svg {
+  width: 18px;
+  height: 18px;
+  stroke: #2f6feb;
   fill: none;
 }
 .result .files-container .months-list {
