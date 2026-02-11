@@ -508,6 +508,13 @@ ul {
           box-shadow: 0 0 0 3px rgba(47, 111, 235, 0.1);
         }
       }
+
+      &.invoice-field--checkbox {
+        flex-direction: row;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 12px;
+      }
     }
   }
 }

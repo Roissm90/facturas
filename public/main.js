@@ -5,6 +5,7 @@ const uploadBtn = document.getElementById('upload-btn');
 const result = document.getElementById('result');
 const resultIncome = document.getElementById('resultIncome');
 const incomeTitle = document.getElementById('income-title');
+const OTHER_EXPENSE_MIN_CENTS = 80000;
 
 // Nombres de meses en español (índice 0 = enero)
 const monthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -154,7 +155,8 @@ drop.addEventListener('drop', (e) => {
       vatRate: '',
       vatDeductible: '',
       vatNonDeductible: '',
-      totalAmount: ''
+      totalAmount: '',
+      isFuel: false
     };
   });
   filesToUpload.push(...wrapped);
@@ -179,7 +181,8 @@ input.addEventListener('change', (e) => {
       vatRate: '',
       vatDeductible: '',
       vatNonDeductible: '',
-      totalAmount: ''
+      totalAmount: '',
+      isFuel: false
     };
   });
   filesToUpload.push(...added);
@@ -353,6 +356,17 @@ uploadBtn.addEventListener('click', () => {
     totalField.appendChild(totalLabel);
     totalField.appendChild(totalInput);
 
+    const fuelField = document.createElement('div');
+    fuelField.className = 'invoice-field invoice-field--checkbox';
+    const fuelLabel = document.createElement('label');
+    fuelLabel.innerText = 'Combustible';
+    const fuelInput = document.createElement('input');
+    fuelInput.type = 'checkbox';
+    fuelInput.checked = Boolean(fObj.isFuel);
+    fuelInput.onchange = (e) => { fObj.isFuel = e.target.checked; };
+    fuelField.appendChild(fuelLabel);
+    fuelField.appendChild(fuelInput);
+
     fields.appendChild(dateField);
     fields.appendChild(numberField);
     fields.appendChild(nifField);
@@ -362,6 +376,7 @@ uploadBtn.addEventListener('click', () => {
     fields.appendChild(dedField);
     fields.appendChild(nonDedField);
     fields.appendChild(totalField);
+    fields.appendChild(fuelField);
 
     row.appendChild(orig);
     row.appendChild(renameField);
@@ -400,7 +415,8 @@ async function modalConfirmUpload() {
     vatRate: fObj.vatRate || '',
     vatDeductible: fObj.vatDeductible || '',
     vatNonDeductible: fObj.vatNonDeductible || '',
-    totalAmount: fObj.totalAmount || ''
+    totalAmount: fObj.totalAmount || '',
+    isFuel: Boolean(fObj.isFuel)
   }));
   fd.append('meta', JSON.stringify(meta));
   // Reconstruir nombre con extensión original preservada
@@ -1014,8 +1030,8 @@ function buildIncomeTable(year, data) {
       otherExpenseCents: null
     };
 
-    if (rowData.otherExpenseCents === null || rowData.otherExpenseCents === undefined) {
-      rowData.otherExpenseCents = 20500;
+    if (rowData.otherExpenseCents === null || rowData.otherExpenseCents === undefined || rowData.otherExpenseCents < OTHER_EXPENSE_MIN_CENTS) {
+      rowData.otherExpenseCents = OTHER_EXPENSE_MIN_CENTS;
     }
 
     const row = document.createElement('div');
@@ -1054,9 +1070,10 @@ function buildIncomeTable(year, data) {
 
     const otherCell = createEditableAmountCell(rowData.otherExpenseCents || 0, async (nextCents, cancelEdit) => {
       const prev = rowData.otherExpenseCents || 0;
-      rowData.otherExpenseCents = nextCents;
+      const normalized = Math.max(nextCents, OTHER_EXPENSE_MIN_CENTS);
+      rowData.otherExpenseCents = normalized;
       recalcTotals();
-      const ok = await saveMonthlyIncome(year, monthKey, { otherExpenseCents: nextCents });
+      const ok = await saveMonthlyIncome(year, monthKey, { otherExpenseCents: normalized });
       if (!ok) {
         rowData.otherExpenseCents = prev;
         recalcTotals();

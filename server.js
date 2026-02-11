@@ -32,6 +32,7 @@ const AUTH_COOKIE = 'facturas_auth';
 const APP_PASSWORD = process.env.APP_PASSWORD || '';
 const INVOICE_DATA_KEY = process.env.INVOICE_DATA_KEY || '';
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+const OTHER_EXPENSE_MIN_CENTS = 80000;
 const AUTH_TOKEN = APP_PASSWORD
   ? crypto.createHash('sha256').update(APP_PASSWORD).digest('hex')
   : null;
@@ -122,6 +123,7 @@ const invoiceSchema = new mongoose.Schema({
   vatDeductibleEnc: String,
   vatNonDeductibleEnc: String,
   totalAmountEnc: String,
+  isFuel: { type: Boolean, default: false },
   invoiceDateSort: Date,
   year: String,
   month: String,
@@ -329,6 +331,7 @@ app.post('/upload', upload.array('files'), async (req, res) => {
     for (let i = 0; i < req.files.length; i++) {
       const file = req.files[i];
       const meta = metaList[i] || {};
+      const isFuel = meta && (meta.isFuel === true || meta.isFuel === 'true' || meta.isFuel === 1 || meta.isFuel === '1');
       const invoiceDateRaw = meta.invoiceDate ? String(meta.invoiceDate) : '';
       const invoiceDateParsed = parseDateInput(invoiceDateRaw);
 
@@ -371,6 +374,7 @@ app.post('/upload', upload.array('files'), async (req, res) => {
         vatDeductibleEnc: encryptText(meta.vatDeductible),
         vatNonDeductibleEnc: encryptText(meta.vatNonDeductible),
         totalAmountEnc: encryptText(meta.totalAmount),
+        isFuel,
         invoiceDateSort: date,
         year,
         month
@@ -817,12 +821,13 @@ app.get('/income/year/:year', async (req, res) => {
     const months = Object.fromEntries(
       Array.from({ length: 12 }, (_, i) => {
         const key = String(i + 1).padStart(2, '0');
-        return [key, { expensesCents: 0, incomeCents: 0, otherExpenseCents: null }];
+        return [key, { expensesCents: 0, incomeCents: 0, otherExpenseCents: OTHER_EXPENSE_MIN_CENTS }];
       })
     );
 
     const invoices = await Invoice.find({ year }).lean();
     for (const doc of invoices) {
+      if (doc.isFuel) continue;
       const month = String(doc.month || '').padStart(2, '0');
       if (!months[month]) continue;
       const totalText = decryptText(doc.totalAmountEnc);
@@ -835,7 +840,8 @@ app.get('/income/year/:year', async (req, res) => {
       const month = String(summary.month || '').padStart(2, '0');
       if (!months[month]) continue;
       months[month].incomeCents = summary.incomeCents || 0;
-      months[month].otherExpenseCents = summary.otherExpenseCents || 0;
+      const otherValue = summary.otherExpenseCents || 0;
+      months[month].otherExpenseCents = Math.max(otherValue, OTHER_EXPENSE_MIN_CENTS);
     }
 
     return res.json({ year, months });
@@ -863,7 +869,8 @@ app.post('/income/month', async (req, res) => {
     if (Object.prototype.hasOwnProperty.call(req.body, 'otherExpenseCents') || Object.prototype.hasOwnProperty.call(req.body, 'otherExpense')) {
       const otherValue = Object.prototype.hasOwnProperty.call(req.body, 'otherExpenseCents') ? req.body.otherExpenseCents : req.body.otherExpense;
       const cents = parseCentsInput(otherValue);
-      update.otherExpenseCents = cents === null ? 0 : cents;
+      const normalized = cents === null ? 0 : cents;
+      update.otherExpenseCents = Math.max(normalized, OTHER_EXPENSE_MIN_CENTS);
     }
 
     if (Object.keys(update).length === 0) {
