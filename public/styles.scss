@@ -213,7 +213,7 @@ ul {
 
 .income-cell--editable {
   border: 1px dashed transparent;
-  padding: 4px 6px;
+  //padding: 4px 6px;
   border-radius: $border-radius;
   cursor: pointer;
   transition: border-color 0.2s ease, background-color 0.2s ease;
@@ -253,9 +253,13 @@ ul {
   }
 
   .income-cell {
-    display: flex;
     justify-content: space-between;
     gap: $spacing-sm;
+    display: none;
+
+    &.income-cell--label {
+      display: flex;
+    }
 
     &::before {
       content: attr(data-label);

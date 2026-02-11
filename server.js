@@ -498,15 +498,15 @@ app.get('/view/:id', async (req, res) => {
 
 app.get('/invoice/:id', async (req, res) => {
   try {
-    console.log('Fetching invoice with ID:', req.params.id);
+    // console.log('Fetching invoice with ID:', req.params.id);
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-      console.log('Invalid ObjectId format');
+      // console.log('Invalid ObjectId format');
       return res.status(400).json({ error: 'invalid id format' });
     }
 
     const doc = await Invoice.findById(req.params.id).lean();
     if (!doc) {
-      console.log('Invoice not found');
+      // console.log('Invoice not found');
       return res.status(404).json({ error: 'not found' });
     }
 
@@ -514,7 +514,7 @@ app.get('/invoice/:id', async (req, res) => {
     const parsedDate = parseDateInput(rawDate) || parseDateFlexible(rawDate) || doc.invoiceDateSort || null;
     const invoiceDate = parsedDate ? formatDateYYYYMMDD(parsedDate) : '';
 
-    console.log('Invoice found, returning data');
+    // console.log('Invoice found, returning data');
     return res.json({
       id: String(doc._id),
       storedName: doc.storedName || '',
@@ -925,7 +925,8 @@ async function start() {
   }
   if (!INVOICE_DATA_KEY) throw new Error('Missing INVOICE_DATA_KEY');
   await mongoose.connect(process.env.MONGODB_URI);
-  app.listen(PORT, () => console.log(`Servidor escuchando en http://localhost:${PORT}`));
+  app.listen(PORT, () => {});
+  console.log(`Servidor escuchando en http://localhost:${PORT}`);
 }
 
 start().catch((e) => {

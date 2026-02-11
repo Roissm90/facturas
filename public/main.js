@@ -23,14 +23,6 @@ const editModalCancel = document.getElementById('edit-modal-cancel');
 const editModalConfirm = document.getElementById('edit-modal-confirm');
 const editModalError = document.getElementById('edit-modal-error');
 
-// Referencias a modales de filtrado
-const yearModal = document.getElementById('year-modal');
-const yearModalList = document.getElementById('year-modal-list');
-const yearModalClose = document.getElementById('year-modal-close');
-const monthModal = document.getElementById('month-modal');
-const monthModalList = document.getElementById('month-modal-list');
-const monthModalClose = document.getElementById('month-modal-close');
-
 // Estado de filtrado
 let selectedYear = null;
 let selectedMonth = null;
@@ -610,16 +602,16 @@ function validateEditMeta(data) {
 async function fetchInvoiceDetails(id) {
   if (!id) return null;
   try {
-    console.log('Fetching invoice details for ID:', id);
+    // console.log('Fetching invoice details for ID:', id);
     const resp = await fetch(`/invoice/${id}`);
-    console.log('Response status:', resp.status);
+    // console.log('Response status:', resp.status);
     if (!resp.ok) {
       const errorData = await resp.json().catch(() => ({}));
       console.error('Failed to fetch invoice:', resp.status, errorData);
       throw new Error('invoice fetch failed');
     }
     const data = await resp.json();
-    console.log('Invoice data received:', data);
+    // console.log('Invoice data received:', data);
     return data;
   } catch (e) {
     console.error('fetchInvoiceDetails error:', e);
@@ -1515,3 +1507,36 @@ function showToast(msg, timeout = 3000) {
 // Cargar lista inicial
 fetchList();
 setUploadButtonLabel(false);
+
+jQuery(document).on('click', '.income-row', function() {
+  if (window.innerWidth >= 768) {
+    return;
+  }
+  //console.log('Row clicked:', this);
+  let $row = jQuery(this);
+  let cells = $row.find('.income-cell');
+  let cellsToToggle = cells.not('.income-cell--label');
+  
+  if ($row.hasClass('is-expanded')) {
+    // Si ya está desplegada, cerrarla
+    cellsToToggle.slideUp(300, function() {
+      jQuery(this).css('display', '');
+    });
+    $row.removeClass('is-expanded');
+  } else {
+    // Cerrar todas las demás filas primero
+    jQuery('.income-row.is-expanded').each(function() {
+      let otherCells = jQuery(this).find('.income-cell').not('.income-cell--label');
+      otherCells.slideUp(300, function() {
+        jQuery(this).css('display', '');
+      });
+      jQuery(this).removeClass('is-expanded');
+    });
+    
+    // Abrir la actual
+    cellsToToggle.each(function() {
+      jQuery(this).css('display', 'flex').hide().slideDown(300);
+    });
+    $row.addClass('is-expanded');
+  }
+});
