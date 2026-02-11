@@ -160,6 +160,110 @@ ul {
   color: $text-color;
 }
 
+.income-table {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-xs;
+  margin-top: $spacing-md;
+}
+
+.income-row {
+  display: grid;
+  grid-template-columns: 1.2fr repeat(4, 1fr);
+  gap: $spacing-sm;
+  align-items: center;
+  background: $white;
+  border: 1px solid $border-color;
+  border-radius: $border-radius;
+  padding: $spacing-sm $spacing-md;
+}
+
+.income-row--header {
+  background: $primary-light;
+  font-weight: 700;
+}
+
+.income-row--total {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  font-weight: 700;
+}
+
+.income-cell {
+  font-size: 14px;
+  color: $text-color;
+}
+
+.income-cell--label {
+  font-weight: 600;
+}
+
+.income-cell--muted {
+  color: $text-light;
+}
+
+.income-cell--diff {
+  font-weight: 700;
+}
+
+.income-cell--diff.is-negative {
+  color: #b42318;
+}
+
+.income-cell--editable {
+  border: 1px dashed transparent;
+  padding: 4px 6px;
+  border-radius: $border-radius;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+
+  &:hover {
+    border-color: $primary-color;
+    background: #f2f6ff;
+  }
+
+  &.is-editing {
+    border-color: $primary-color;
+    background: #f2f6ff;
+  }
+
+  input {
+    width: 100%;
+    border: 1px solid $border-color;
+    border-radius: $border-radius;
+    padding: 4px 6px;
+    font-size: 14px;
+
+    &:focus {
+      outline: none;
+      border-color: $primary-color;
+      box-shadow: 0 0 0 3px rgba(47, 111, 235, 0.12);
+    }
+  }
+}
+
+@media (max-width: 767px) {
+  .income-row {
+    grid-template-columns: 1fr;
+  }
+
+  .income-row--header {
+    display: none;
+  }
+
+  .income-cell {
+    display: flex;
+    justify-content: space-between;
+    gap: $spacing-sm;
+
+    &::before {
+      content: attr(data-label);
+      color: $text-light;
+      font-weight: 600;
+    }
+  }
+}
+
 @media (max-width: 767px) {
   .title-page {
     font-size: 22px;

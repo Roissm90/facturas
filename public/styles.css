@@ -108,6 +108,102 @@ ul {
   color: #172b4d;
 }
 
+.income-table {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.income-row {
+  display: grid;
+  grid-template-columns: 1.2fr repeat(4, 1fr);
+  gap: 8px;
+  align-items: center;
+  background: #fff;
+  border: 1px solid #e6eaf8;
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+
+.income-row--header {
+  background: #ceddff;
+  font-weight: 700;
+}
+
+.income-row--total {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  font-weight: 700;
+}
+
+.income-cell {
+  font-size: 14px;
+  color: #172b4d;
+}
+
+.income-cell--label {
+  font-weight: 600;
+}
+
+.income-cell--muted {
+  color: #6b7280;
+}
+
+.income-cell--diff {
+  font-weight: 700;
+}
+
+.income-cell--diff.is-negative {
+  color: #b42318;
+}
+
+.income-cell--editable {
+  border: 1px dashed transparent;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+.income-cell--editable:hover {
+  border-color: #2f6feb;
+  background: #f2f6ff;
+}
+.income-cell--editable.is-editing {
+  border-color: #2f6feb;
+  background: #f2f6ff;
+}
+.income-cell--editable input {
+  width: 100%;
+  border: 1px solid #e6eaf8;
+  border-radius: 6px;
+  padding: 4px 6px;
+  font-size: 14px;
+}
+.income-cell--editable input:focus {
+  outline: none;
+  border-color: #2f6feb;
+  box-shadow: 0 0 0 3px rgba(47, 111, 235, 0.12);
+}
+
+@media (max-width: 767px) {
+  .income-row {
+    grid-template-columns: 1fr;
+  }
+  .income-row--header {
+    display: none;
+  }
+  .income-cell {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .income-cell::before {
+    content: attr(data-label);
+    color: #6b7280;
+    font-weight: 600;
+  }
+}
 @media (max-width: 767px) {
   .title-page {
     font-size: 22px;

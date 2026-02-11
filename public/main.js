@@ -3,6 +3,7 @@ const input = document.getElementById('file-input');
 const preview = document.getElementById('preview');
 const uploadBtn = document.getElementById('upload-btn');
 const result = document.getElementById('result');
+const resultIncome = document.getElementById('resultIncome');
 
 // Nombres de meses en español (índice 0 = enero)
 const monthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -26,6 +27,7 @@ const monthModalClose = document.getElementById('month-modal-close');
 let selectedYear = null;
 let selectedMonth = null;
 let allTree = {}; // árbol completo de archivos
+let incomeRequestId = 0;
 
 // Referencias modal de borrado
 const deleteModal = document.getElementById('delete-modal');
@@ -556,6 +558,279 @@ function parseAmountToCents(value) {
   return Math.round(num * 100);
 }
 
+function formatCentsToAmount(cents) {
+  const value = (cents || 0) / 100;
+  return value.toFixed(2).replace('.', ',');
+}
+
+async function fetchIncomeYear(year) {
+  if (!year) return null;
+  try {
+    const resp = await fetch(`/income/year/${year}`);
+    if (!resp.ok) throw new Error('income year failed');
+    return await resp.json();
+  } catch (e) {
+    console.error(e);
+    return null;
+  }
+}
+
+async function saveMonthlyIncome(year, month, payload) {
+  if (!year || !month) return false;
+  try {
+    const resp = await fetch('/income/month', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ year, month, ...payload })
+    });
+    if (!resp.ok) throw new Error('income save failed');
+    return true;
+  } catch (e) {
+    console.error(e);
+    return false;
+  }
+}
+
+function createEditableAmountCell(initialCents, onCommit) {
+  const cell = document.createElement('div');
+  cell.className = 'income-cell income-cell--editable';
+  cell.title = 'Click para editar';
+  cell.innerText = formatCentsToAmount(initialCents || 0);
+
+  const startEdit = () => {
+    if (cell.classList.contains('is-editing')) return;
+    cell.classList.add('is-editing');
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.inputMode = 'decimal';
+    input.placeholder = '0,00';
+    input.value = initialCents ? formatCentsToAmount(initialCents) : '';
+    cell.innerHTML = '';
+    cell.appendChild(input);
+    input.focus();
+    input.select();
+
+    const cancel = () => {
+      cell.classList.remove('is-editing');
+      cell.innerHTML = '';
+      cell.innerText = formatCentsToAmount(initialCents || 0);
+    };
+
+    const commit = async () => {
+      const nextCents = parseAmountToCents(input.value);
+      const normalized = nextCents === null ? 0 : nextCents;
+      cell.classList.remove('is-editing');
+      cell.innerHTML = '';
+      cell.innerText = formatCentsToAmount(normalized);
+      const ok = await onCommit(normalized, cancel);
+      if (ok) {
+        initialCents = normalized;
+      }
+    };
+
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        commit();
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        cancel();
+      }
+    });
+
+    input.addEventListener('blur', commit);
+  };
+
+  cell.addEventListener('click', startEdit);
+  return cell;
+}
+
+function buildIncomeTable(year, data) {
+  const months = data && data.months ? data.months : {};
+  const container = document.createElement('div');
+  container.className = 'income-table';
+  const totals = {
+    expensesCents: 0,
+    incomeCents: 0,
+    otherExpenseCents: 0,
+    diffCents: 0
+  };
+
+  const header = document.createElement('div');
+  header.className = 'income-row income-row--header';
+  ['Mes', 'Gastos', 'Ingresos', 'Otros gastos', 'Diferencia'].forEach((label) => {
+    const cell = document.createElement('div');
+    cell.className = 'income-cell';
+    cell.innerText = label;
+    header.appendChild(cell);
+  });
+  container.appendChild(header);
+
+  const rows = [];
+
+  const recalcTotals = () => {
+    totals.expensesCents = 0;
+    totals.incomeCents = 0;
+    totals.otherExpenseCents = 0;
+    totals.diffCents = 0;
+
+    rows.forEach(({ rowData, diffCell }) => {
+      totals.expensesCents += rowData.expensesCents || 0;
+      totals.incomeCents += rowData.incomeCents || 0;
+      totals.otherExpenseCents += rowData.otherExpenseCents || 0;
+      const diff = (rowData.incomeCents || 0) - ((rowData.expensesCents || 0) + (rowData.otherExpenseCents || 0));
+      totals.diffCents += diff;
+      diffCell.innerText = formatCentsToAmount(diff);
+      diffCell.classList.toggle('is-negative', diff < 0);
+    });
+
+    totalExpenses.innerText = formatCentsToAmount(totals.expensesCents);
+    totalIncome.innerText = formatCentsToAmount(totals.incomeCents);
+    totalOther.innerText = formatCentsToAmount(totals.otherExpenseCents);
+    totalDiff.innerText = formatCentsToAmount(totals.diffCents);
+    totalDiff.classList.toggle('is-negative', totals.diffCents < 0);
+  };
+
+  monthNames.forEach((monthLabel, index) => {
+    const monthKey = String(index + 1).padStart(2, '0');
+    const rowData = months[monthKey] || {
+      expensesCents: 0,
+      incomeCents: 0,
+      otherExpenseCents: null
+    };
+
+    if (rowData.otherExpenseCents === null || rowData.otherExpenseCents === undefined) {
+      rowData.otherExpenseCents = 20500;
+    }
+
+    const row = document.createElement('div');
+    row.className = 'income-row';
+
+    const labelCell = document.createElement('div');
+    labelCell.className = 'income-cell income-cell--label';
+    labelCell.setAttribute('data-label', 'Mes');
+    labelCell.innerText = monthLabel;
+    row.appendChild(labelCell);
+
+    const expensesCell = document.createElement('div');
+    expensesCell.className = 'income-cell income-cell--muted';
+    expensesCell.setAttribute('data-label', 'Gastos');
+    expensesCell.innerText = formatCentsToAmount(rowData.expensesCents || 0);
+    row.appendChild(expensesCell);
+
+    const diffCell = document.createElement('div');
+    diffCell.className = 'income-cell income-cell--diff';
+    diffCell.setAttribute('data-label', 'Diferencia');
+
+    const incomeCell = createEditableAmountCell(rowData.incomeCents || 0, async (nextCents, cancelEdit) => {
+      const prev = rowData.incomeCents || 0;
+      rowData.incomeCents = nextCents;
+      recalcTotals();
+      const ok = await saveMonthlyIncome(year, monthKey, { incomeCents: nextCents });
+      if (!ok) {
+        rowData.incomeCents = prev;
+        recalcTotals();
+        cancelEdit();
+        showToast('No se pudieron guardar los ingresos');
+        return false;
+      }
+      return true;
+    });
+
+    const otherCell = createEditableAmountCell(rowData.otherExpenseCents || 0, async (nextCents, cancelEdit) => {
+      const prev = rowData.otherExpenseCents || 0;
+      rowData.otherExpenseCents = nextCents;
+      recalcTotals();
+      const ok = await saveMonthlyIncome(year, monthKey, { otherExpenseCents: nextCents });
+      if (!ok) {
+        rowData.otherExpenseCents = prev;
+        recalcTotals();
+        cancelEdit();
+        showToast('No se pudieron guardar otros gastos');
+        return false;
+      }
+      return true;
+    });
+
+    incomeCell.setAttribute('data-label', 'Ingresos');
+    otherCell.setAttribute('data-label', 'Otros gastos');
+    row.appendChild(incomeCell);
+    row.appendChild(otherCell);
+    row.appendChild(diffCell);
+    container.appendChild(row);
+    rows.push({ rowData, diffCell });
+  });
+
+  const totalsRow = document.createElement('div');
+  totalsRow.className = 'income-row income-row--total';
+
+  const totalLabel = document.createElement('div');
+  totalLabel.className = 'income-cell income-cell--label';
+  totalLabel.setAttribute('data-label', 'Totales');
+  totalLabel.innerText = 'Totales';
+  totalsRow.appendChild(totalLabel);
+
+  const totalExpenses = document.createElement('div');
+  totalExpenses.className = 'income-cell income-cell--muted';
+  totalExpenses.setAttribute('data-label', 'Gastos');
+  totalsRow.appendChild(totalExpenses);
+
+  const totalIncome = document.createElement('div');
+  totalIncome.className = 'income-cell';
+  totalIncome.setAttribute('data-label', 'Ingresos');
+  totalsRow.appendChild(totalIncome);
+
+  const totalOther = document.createElement('div');
+  totalOther.className = 'income-cell';
+  totalOther.setAttribute('data-label', 'Otros gastos');
+  totalsRow.appendChild(totalOther);
+
+  const totalDiff = document.createElement('div');
+  totalDiff.className = 'income-cell income-cell--diff';
+  totalDiff.setAttribute('data-label', 'Diferencia');
+  totalsRow.appendChild(totalDiff);
+
+  container.appendChild(totalsRow);
+  recalcTotals();
+
+  return container;
+}
+
+async function renderIncomePanel() {
+  if (!resultIncome) return;
+  resultIncome.innerHTML = '';
+
+  if (!selectedYear) {
+    const msg = document.createElement('p');
+    msg.className = 'no-data';
+    msg.innerText = 'Selecciona un año para ver ingresos y gastos.';
+    resultIncome.appendChild(msg);
+    return;
+  }
+
+  if (selectedMonth) return;
+
+  const loading = document.createElement('p');
+  loading.className = 'loading';
+  loading.innerText = 'Cargando resumen anual...';
+  resultIncome.appendChild(loading);
+
+  const requestId = ++incomeRequestId;
+  const data = await fetchIncomeYear(selectedYear);
+  if (requestId !== incomeRequestId) return;
+
+  resultIncome.innerHTML = '';
+  if (!data || !data.months) {
+    const msg = document.createElement('p');
+    msg.className = 'no-data';
+    msg.innerText = 'No se pudo cargar el resumen anual.';
+    resultIncome.appendChild(msg);
+    return;
+  }
+
+  resultIncome.appendChild(buildIncomeTable(selectedYear, data));
+}
+
 async function fetchList() {
   // Siempre cargar el árbol completo
   try {
@@ -726,6 +1001,7 @@ function renderList() {
   const container = document.getElementById('result');
   container.innerHTML = '';
   container.appendChild(el);
+  renderIncomePanel();
   // reemplazar iconos Feather si está disponible
   if (window.feather && typeof window.feather.replace === 'function') {
     try { window.feather.replace(); } catch (e) { /* ignore */ }

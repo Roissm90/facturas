@@ -130,6 +130,20 @@ const invoiceSchema = new mongoose.Schema({
 
 const Invoice = mongoose.model('Invoice', invoiceSchema);
 
+const monthlySummarySchema = new mongoose.Schema(
+  {
+    year: { type: String, required: true },
+    month: { type: String, required: true },
+    incomeCents: { type: Number, default: 0 },
+    otherExpenseCents: { type: Number, default: 0 }
+  },
+  { timestamps: true }
+);
+
+monthlySummarySchema.index({ year: 1, month: 1 }, { unique: true });
+
+const MonthlySummary = mongoose.model('MonthlySummary', monthlySummarySchema);
+
 function getDateFromBuffer(file) {
   try {
     const parser = exifParser.create(file.buffer);
@@ -274,6 +288,14 @@ function parseAmountToCents(value) {
 function formatCentsToAmount(cents) {
   const value = (cents || 0) / 100;
   return value.toFixed(2).replace('.', ',');
+}
+
+function parseCentsInput(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.round(value);
+  }
+  return parseAmountToCents(value);
 }
 
 app.post('/upload', upload.array('files'), async (req, res) => {
@@ -689,6 +711,86 @@ app.get('/download/year/:year', async (req, res) => {
   } catch (e) {
     console.error('download year error', e);
     return res.status(500).send('internal');
+  }
+});
+
+app.get('/income/year/:year', async (req, res) => {
+  try {
+    const year = String(req.params.year);
+    const months = Object.fromEntries(
+      Array.from({ length: 12 }, (_, i) => {
+        const key = String(i + 1).padStart(2, '0');
+        return [key, { expensesCents: 0, incomeCents: 0, otherExpenseCents: null }];
+      })
+    );
+
+    const invoices = await Invoice.find({ year }).lean();
+    for (const doc of invoices) {
+      const month = String(doc.month || '').padStart(2, '0');
+      if (!months[month]) continue;
+      const totalText = decryptText(doc.totalAmountEnc);
+      const cents = parseAmountToCents(totalText) || 0;
+      months[month].expensesCents += cents;
+    }
+
+    const summaries = await MonthlySummary.find({ year }).lean();
+    for (const summary of summaries) {
+      const month = String(summary.month || '').padStart(2, '0');
+      if (!months[month]) continue;
+      months[month].incomeCents = summary.incomeCents || 0;
+      months[month].otherExpenseCents = summary.otherExpenseCents || 0;
+    }
+
+    return res.json({ year, months });
+  } catch (e) {
+    console.error('income year error', e);
+    return res.status(500).json({ error: 'income failed' });
+  }
+});
+
+app.post('/income/month', async (req, res) => {
+  try {
+    const year = req.body && req.body.year ? String(req.body.year) : '';
+    const monthRaw = req.body && req.body.month ? String(req.body.month) : '';
+    if (!year || !monthRaw) {
+      return res.status(400).json({ success: false, error: 'year or month missing' });
+    }
+    const month = monthRaw.padStart(2, '0');
+
+    const update = {};
+    if (Object.prototype.hasOwnProperty.call(req.body, 'incomeCents') || Object.prototype.hasOwnProperty.call(req.body, 'income')) {
+      const incomeValue = Object.prototype.hasOwnProperty.call(req.body, 'incomeCents') ? req.body.incomeCents : req.body.income;
+      const cents = parseCentsInput(incomeValue);
+      update.incomeCents = cents === null ? 0 : cents;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'otherExpenseCents') || Object.prototype.hasOwnProperty.call(req.body, 'otherExpense')) {
+      const otherValue = Object.prototype.hasOwnProperty.call(req.body, 'otherExpenseCents') ? req.body.otherExpenseCents : req.body.otherExpense;
+      const cents = parseCentsInput(otherValue);
+      update.otherExpenseCents = cents === null ? 0 : cents;
+    }
+
+    if (Object.keys(update).length === 0) {
+      return res.status(400).json({ success: false, error: 'no fields to update' });
+    }
+
+    const doc = await MonthlySummary.findOneAndUpdate(
+      { year, month },
+      { $set: update },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    ).lean();
+
+    return res.json({
+      success: true,
+      data: {
+        year: doc.year,
+        month: doc.month,
+        incomeCents: doc.incomeCents || 0,
+        otherExpenseCents: doc.otherExpenseCents || 0
+      }
+    });
+  } catch (e) {
+    console.error('income month error', e);
+    return res.status(500).json({ success: false, error: 'income save failed' });
   }
 });
 
