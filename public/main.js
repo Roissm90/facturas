@@ -39,6 +39,22 @@ const downloadModalMessage = document.getElementById('download-modal-message');
 const downloadModalConfirm = document.getElementById('download-modal-confirm');
 const downloadModalCancel = document.getElementById('download-modal-cancel');
 let pendingDeleteYear = null;
+const baseCategoryOptions = [
+  'Compras',
+  'Transportes y fletes',
+  'Agentes mediadores',
+  'Sueldos y salarios',
+  'Seg. Social y autonomos',
+  'Trabajos realizados por otras empresas',
+  'Energía y agua de instalaciones',
+  'Alquileres de locales',
+  'Canon explotaciones',
+  'Gastos financieros',
+  'Primas seguros, bienes o productos',
+  'Tributos no estatales',
+  'Reparaciones y conservación',
+  'Otros gastos'
+];
 // Función auxiliar para extraer extensión y nombre base
 function getFileExtension(filename) {
   const idx = filename.lastIndexOf('.');
@@ -129,6 +145,7 @@ drop.addEventListener('drop', (e) => {
       invoiceNumber: '',
       nif: '',
       razonSocial: '',
+      baseCategory: '',
       baseAmount: '',
       vatRate: '',
       vatDeductible: '',
@@ -153,6 +170,7 @@ input.addEventListener('change', (e) => {
       invoiceNumber: '',
       nif: '',
       razonSocial: '',
+      baseCategory: '',
       baseAmount: '',
       vatRate: '',
       vatDeductible: '',
@@ -255,6 +273,20 @@ uploadBtn.addEventListener('click', () => {
     baseField.className = 'invoice-field';
     const baseLabel = document.createElement('label');
     baseLabel.innerText = 'Base imponible';
+    const baseSelect = document.createElement('select');
+    baseSelect.value = fObj.baseCategory || '';
+    baseSelect.required = true;
+    const baseSelectPlaceholder = document.createElement('option');
+    baseSelectPlaceholder.value = '';
+    baseSelectPlaceholder.innerText = 'Selecciona categoria';
+    baseSelect.appendChild(baseSelectPlaceholder);
+    baseCategoryOptions.forEach((optionLabel) => {
+      const option = document.createElement('option');
+      option.value = optionLabel;
+      option.innerText = optionLabel;
+      baseSelect.appendChild(option);
+    });
+    baseSelect.oninput = (e) => { fObj.baseCategory = e.target.value; };
     const baseInput = document.createElement('input');
     baseInput.type = 'text';
     baseInput.value = fObj.baseAmount || '';
@@ -262,6 +294,7 @@ uploadBtn.addEventListener('click', () => {
     baseInput.required = true;
     baseInput.oninput = (e) => { fObj.baseAmount = e.target.value; };
     baseField.appendChild(baseLabel);
+    baseField.appendChild(baseSelect);
     baseField.appendChild(baseInput);
 
     const vatField = document.createElement('div');
@@ -351,6 +384,7 @@ async function modalConfirmUpload() {
     invoiceNumber: fObj.invoiceNumber || '',
     nif: fObj.nif || '',
     razonSocial: fObj.razonSocial || '',
+    baseCategory: fObj.baseCategory || '',
     baseAmount: fObj.baseAmount || '',
     vatRate: fObj.vatRate || '',
     vatDeductible: fObj.vatDeductible || '',
@@ -405,6 +439,10 @@ function validateInvoiceMeta() {
     }
     if (!isValidLegalName(fObj.razonSocial)) {
       showToast('La razon social solo puede contener letras');
+      return false;
+    }
+    if (!fObj.baseCategory) {
+      showToast('Falta la categoria de base imponible');
       return false;
     }
     if (!fObj.baseAmount) {

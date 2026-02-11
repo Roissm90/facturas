@@ -116,6 +116,7 @@ const invoiceSchema = new mongoose.Schema({
   invoiceNumberEnc: String,
   nifEnc: String,
   legalNameEnc: String,
+  baseCategoryEnc: String,
   baseAmountEnc: String,
   vatRateEnc: String,
   vatDeductibleEnc: String,
@@ -328,6 +329,7 @@ app.post('/upload', upload.array('files'), async (req, res) => {
         invoiceNumberEnc: encryptText(meta.invoiceNumber),
         nifEnc: encryptText(meta.nif),
         legalNameEnc: encryptText(meta.razonSocial),
+        baseCategoryEnc: encryptText(meta.baseCategory),
         baseAmountEnc: encryptText(meta.baseAmount),
         vatRateEnc: encryptText(meta.vatRate),
         vatDeductibleEnc: encryptText(meta.vatDeductible),
@@ -473,12 +475,34 @@ function streamFromUrl(url) {
   });
 }
 
+const baseCategoryHeaders = [
+  'Compras',
+  'Transportes y fletes',
+  'Agentes mediadores',
+  'Sueldos y salarios',
+  'Seg. Social y autonomos',
+  'Trabajos realizados por otras empresas',
+  'Energía y agua de instalaciones',
+  'Alquileres de locales',
+  'Canon explotaciones',
+  'Gastos financieros',
+  'Primas seguros, bienes o productos',
+  'Tributos no estatales',
+  'Reparaciones y conservación',
+  'Otros gastos'
+];
+
 function buildInvoiceRows(docs) {
   return docs.map((doc) => {
     const decryptedDate = decryptText(doc.invoiceDateEnc);
     const parsedDate = parseDateFlexible(decryptedDate) || doc.invoiceDateSort || doc.createdAt || null;
     const sortKey = buildSortKey(parsedDate);
     const displayDate = parsedDate ? formatDateDDMMYYYY(parsedDate) : formatDateDDMMYYYY(decryptedDate);
+    const categoryColumns = Object.fromEntries(baseCategoryHeaders.map((header) => [header, '']));
+    const selectedCategory = decryptText(doc.baseCategoryEnc);
+    if (selectedCategory && Object.prototype.hasOwnProperty.call(categoryColumns, selectedCategory)) {
+      categoryColumns[selectedCategory] = decryptText(doc.baseAmountEnc);
+    }
 
     return {
       sortKey,
@@ -489,7 +513,7 @@ function buildInvoiceRows(docs) {
         'concepto': doc.storedName || '',
         'NIF': decryptText(doc.nifEnc),
         'razón social': decryptText(doc.legalNameEnc),
-        'base imponible': decryptText(doc.baseAmountEnc),
+        ...categoryColumns,
         'tipo': decryptText(doc.vatRateEnc),
         'IVA deducible': decryptText(doc.vatDeductibleEnc),
         'IVA no deducible': decryptText(doc.vatNonDeductibleEnc),
@@ -501,31 +525,40 @@ function buildInvoiceRows(docs) {
 
 function buildExcelBuffer(rows, sheetName) {
   const workbook = XLSX.utils.book_new();
-  const headers = ['nº orden', 'fecha', 'nº factura', 'concepto', 'NIF', 'razón social', 'base imponible', 'tipo', 'IVA deducible', 'IVA no deducible', 'importe total'];
+  const headers = ['nº orden', 'fecha', 'nº factura', 'concepto', 'NIF', 'razón social', ...baseCategoryHeaders, 'tipo', 'IVA deducible', 'IVA no deducible', 'importe total'];
   const worksheet = rows.length
     ? XLSX.utils.json_to_sheet(rows, { header: headers })
     : XLSX.utils.aoa_to_sheet([headers]);
 
   const totals = rows.reduce(
     (acc, row) => {
-      const base = parseAmountToCents(row['base imponible']) || 0;
+      for (const category of baseCategoryHeaders) {
+        acc.category[category] += parseAmountToCents(row[category]) || 0;
+      }
       const ded = parseAmountToCents(row['IVA deducible']) || 0;
       const nonDed = parseAmountToCents(row['IVA no deducible']) || 0;
       const total = parseAmountToCents(row['importe total']) || 0;
       return {
-        base: acc.base + base,
+        category: acc.category,
         ded: acc.ded + ded,
         nonDed: acc.nonDed + nonDed,
         total: acc.total + total
       };
     },
-    { base: 0, ded: 0, nonDed: 0, total: 0 }
+    {
+      category: Object.fromEntries(baseCategoryHeaders.map((header) => [header, 0])),
+      ded: 0,
+      nonDed: 0,
+      total: 0
+    }
   );
 
   const totalRow = [
     ...headers.map(() => '')
   ];
-  totalRow[headers.indexOf('base imponible')] = formatCentsToAmount(totals.base);
+  for (const category of baseCategoryHeaders) {
+    totalRow[headers.indexOf(category)] = formatCentsToAmount(totals.category[category]);
+  }
   totalRow[headers.indexOf('IVA deducible')] = formatCentsToAmount(totals.ded);
   totalRow[headers.indexOf('IVA no deducible')] = formatCentsToAmount(totals.nonDed);
   totalRow[headers.indexOf('importe total')] = formatCentsToAmount(totals.total);
