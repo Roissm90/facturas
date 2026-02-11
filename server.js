@@ -8,7 +8,7 @@ const mongoose = require('mongoose');
 const crypto = require('crypto');
 const cloudinary = require('cloudinary').v2;
 const archiver = require('archiver');
-const XLSX = require('xlsx');
+const ExcelJS = require('exceljs');
 const https = require('https');
 const http = require('http');
 
@@ -523,12 +523,13 @@ function buildInvoiceRows(docs) {
   });
 }
 
-function buildExcelBuffer(rows, sheetName) {
-  const workbook = XLSX.utils.book_new();
+async function buildExcelBuffer(rows, sheetName) {
+  const workbook = new ExcelJS.Workbook();
   const headers = ['nº orden', 'fecha', 'nº factura', 'concepto', 'NIF', 'razón social', ...baseCategoryHeaders, 'tipo', 'IVA deducible', 'IVA no deducible', 'importe total'];
-  const worksheet = rows.length
-    ? XLSX.utils.json_to_sheet(rows, { header: headers })
-    : XLSX.utils.aoa_to_sheet([headers]);
+  const worksheet = workbook.addWorksheet(sheetName || 'Facturas');
+
+  worksheet.columns = headers.map((header) => ({ header, key: header }));
+  rows.forEach((row) => worksheet.addRow(row));
 
   const totals = rows.reduce(
     (acc, row) => {
@@ -553,20 +554,49 @@ function buildExcelBuffer(rows, sheetName) {
     }
   );
 
-  const totalRow = [
-    ...headers.map(() => '')
-  ];
+  const totalRowData = Object.fromEntries(headers.map((header) => [header, '']));
   for (const category of baseCategoryHeaders) {
-    totalRow[headers.indexOf(category)] = formatCentsToAmount(totals.category[category]);
+    totalRowData[category] = formatCentsToAmount(totals.category[category]);
   }
-  totalRow[headers.indexOf('IVA deducible')] = formatCentsToAmount(totals.ded);
-  totalRow[headers.indexOf('IVA no deducible')] = formatCentsToAmount(totals.nonDed);
-  totalRow[headers.indexOf('importe total')] = formatCentsToAmount(totals.total);
+  totalRowData['IVA deducible'] = formatCentsToAmount(totals.ded);
+  totalRowData['IVA no deducible'] = formatCentsToAmount(totals.nonDed);
+  totalRowData['importe total'] = formatCentsToAmount(totals.total);
+  const totalRow = worksheet.addRow(totalRowData);
 
-  XLSX.utils.sheet_add_aoa(worksheet, [totalRow], { origin: -1 });
+  const headerRow = worksheet.getRow(1);
+  headerRow.eachCell((cell) => {
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF000000' }
+    };
+    cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+  });
 
-  XLSX.utils.book_append_sheet(workbook, worksheet, sheetName || 'Facturas');
-  return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+  totalRow.eachCell((cell) => {
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF3E9600' }
+    };
+    cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+  });
+
+  const maxLengths = headers.map((header) => String(header).length);
+  worksheet.eachRow((row) => {
+    row.eachCell((cell, colNumber) => {
+      const value = cell.value === null || cell.value === undefined ? '' : String(cell.value);
+      if (value.length > maxLengths[colNumber - 1]) {
+        maxLengths[colNumber - 1] = value.length;
+      }
+    });
+  });
+
+  worksheet.columns.forEach((column, index) => {
+    column.width = maxLengths[index] + 2;
+  });
+
+  return workbook.xlsx.writeBuffer();
 }
 
 app.get('/export/year/:year', async (req, res) => {
@@ -579,7 +609,7 @@ app.get('/export/year/:year', async (req, res) => {
         ...item.row,
         'nº orden': String(index + 1)
       }));
-    const buffer = buildExcelBuffer(rows, `Facturas ${year}`);
+    const buffer = await buildExcelBuffer(rows, `Facturas ${year}`);
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="facturas_${year}.xlsx"`);
