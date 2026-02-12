@@ -1121,6 +1121,32 @@ app.post('/income/month', async (req, res) => {
   }
 });
 
+// DELETE endpoint para eliminar datos de un mes
+app.delete('/income/:year/:month', async (req, res) => {
+  try {
+    const year = String(req.params.year);
+    const month = String(req.params.month).padStart(2, '0');
+    
+    if (!year || !month) {
+      return res.status(400).json({ success: false, error: 'year or month missing' });
+    }
+
+    const result = await MonthlySummary.deleteOne({ year, month });
+    
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ success: false, error: 'No se encontró el mes' });
+    }
+
+    return res.json({ 
+      success: true, 
+      message: `Datos de ${month}/${year} eliminados correctamente` 
+    });
+  } catch (e) {
+    console.error('income delete error', e);
+    return res.status(500).json({ success: false, error: 'Error al eliminar los datos' });
+  }
+});
+
 app.post('/income/upload-excel', upload.single('excel'), async (req, res) => {
   try {
     if (!req.file) {

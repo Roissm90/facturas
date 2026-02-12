@@ -286,6 +286,26 @@ ul {
   }
 }
 
+.income-delete-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px 6px;
+  opacity: 0.5;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  margin-left: auto;
+
+  &:hover {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
+}
+
 @media (max-width: 767px) {
   .income-row {
     grid-template-columns: 1fr;

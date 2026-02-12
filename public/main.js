@@ -921,6 +921,20 @@ async function saveMonthlyIncome(year, month, payload) {
   }
 }
 
+async function deleteMonthIncome(year, month) {
+  if (!year || !month) return false;
+  try {
+    const resp = await fetch(`/income/${year}/${month}`, {
+      method: 'DELETE'
+    });
+    if (!resp.ok) throw new Error('income delete failed');
+    return true;
+  } catch (e) {
+    console.error(e);
+    return false;
+  }
+}
+
 async function saveYearMoney(year, payload) {
   if (!year) return false;
   try {
@@ -1048,7 +1062,35 @@ function buildIncomeTable(year, data) {
     const labelCell = document.createElement('div');
     labelCell.className = 'income-cell income-cell--label';
     labelCell.setAttribute('data-label', 'Mes');
-    labelCell.innerText = monthLabel;
+    labelCell.style.display = 'flex';
+    labelCell.style.alignItems = 'center';
+    labelCell.style.gap = '8px';
+    
+    const monthText = document.createElement('span');
+    monthText.innerText = monthLabel;
+    labelCell.appendChild(monthText);
+    
+    // Solo mostrar botón de eliminar si hay datos en el mes
+    if ((rowData.expensesCents || 0) > 0 || (rowData.incomeCents || 0) > 0) {
+      const deleteBtn = document.createElement('button');
+      deleteBtn.innerText = '🗑️';
+      deleteBtn.className = 'income-delete-btn';
+      deleteBtn.title = 'Eliminar datos de ' + monthLabel;
+      deleteBtn.onclick = async (e) => {
+        e.stopPropagation();
+        if (confirm(`¿Eliminar todos los datos de ${monthLabel} ${year}?`)) {
+          const ok = await deleteMonthIncome(year, monthKey);
+          if (ok) {
+            showToast(`Datos de ${monthLabel} eliminados`, 'success');
+            renderIncomePanel();
+          } else {
+            showToast('Error al eliminar los datos', 'error');
+          }
+        }
+      };
+      labelCell.appendChild(deleteBtn);
+    }
+    
     row.appendChild(labelCell);
 
     const expensesCell = document.createElement('div');
