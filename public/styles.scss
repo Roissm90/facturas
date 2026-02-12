@@ -189,6 +189,30 @@ ul {
   font-weight: 700;
 }
 
+.income-row--summary-header {
+  background: #ceddff;
+  border-color: #c7d2fe;
+  font-weight: 700;
+  margin-top: $spacing-2xl;
+  grid-template-columns: 1.2fr repeat(3, 1fr);
+
+  .income-cell {
+    &:first-child {
+      visibility: hidden;
+      opacity: 0;
+    }
+  }
+}
+
+.income-row--summary {
+  grid-template-columns: 1.2fr repeat(3, 1fr);
+
+  .income-cell--label {
+    margin-left: 0;
+    text-align: center;
+  }
+}
+
 .income-cell {
   font-size: 14px;
   color: $text-color;

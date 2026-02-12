@@ -146,6 +146,18 @@ monthlySummarySchema.index({ year: 1, month: 1 }, { unique: true });
 
 const MonthlySummary = mongoose.model('MonthlySummary', monthlySummarySchema);
 
+const annualSummarySchema = new mongoose.Schema(
+  {
+    year: { type: String, required: true, unique: true },
+    initialMoneyCents: { type: Number, default: 0 },
+    finalMoneyCents: { type: Number, default: 0 },
+    diffMoneyCents: { type: Number, default: 0 }
+  },
+  { timestamps: true }
+);
+
+const AnnualSummary = mongoose.model('AnnualSummary', annualSummarySchema);
+
 function getDateFromBuffer(file) {
   try {
     const parser = exifParser.create(file.buffer);
@@ -844,10 +856,82 @@ app.get('/income/year/:year', async (req, res) => {
       months[month].otherExpenseCents = Math.max(otherValue, OTHER_EXPENSE_MIN_CENTS);
     }
 
-    return res.json({ year, months });
+    const yearDoc = await AnnualSummary.findOne({ year }).lean();
+    const yearSummary = yearDoc
+      ? {
+        initialMoneyCents: yearDoc.initialMoneyCents || 0,
+        finalMoneyCents: yearDoc.finalMoneyCents || 0,
+        diffMoneyCents: yearDoc.diffMoneyCents || 0
+      }
+      : {
+        initialMoneyCents: 0,
+        finalMoneyCents: 0,
+        diffMoneyCents: 0
+      };
+
+    return res.json({ year, months, yearSummary });
   } catch (e) {
     console.error('income year error', e);
     return res.status(500).json({ error: 'income failed' });
+  }
+});
+
+app.post('/income/year', async (req, res) => {
+  try {
+    const year = req.body && req.body.year ? String(req.body.year) : '';
+    if (!year) {
+      return res.status(400).json({ success: false, error: 'year missing' });
+    }
+
+    const hasInitial = Object.prototype.hasOwnProperty.call(req.body, 'initialMoneyCents')
+      || Object.prototype.hasOwnProperty.call(req.body, 'initialMoney');
+    const hasFinal = Object.prototype.hasOwnProperty.call(req.body, 'finalMoneyCents')
+      || Object.prototype.hasOwnProperty.call(req.body, 'finalMoney');
+
+    if (!hasInitial && !hasFinal) {
+      return res.status(400).json({ success: false, error: 'no fields to update' });
+    }
+
+    const existing = await AnnualSummary.findOne({ year }).lean();
+    let nextInitial = existing ? existing.initialMoneyCents || 0 : 0;
+    let nextFinal = existing ? existing.finalMoneyCents || 0 : 0;
+
+    if (hasInitial) {
+      const raw = Object.prototype.hasOwnProperty.call(req.body, 'initialMoneyCents')
+        ? req.body.initialMoneyCents
+        : req.body.initialMoney;
+      const cents = parseCentsInput(raw);
+      nextInitial = cents === null ? 0 : cents;
+    }
+
+    if (hasFinal) {
+      const raw = Object.prototype.hasOwnProperty.call(req.body, 'finalMoneyCents')
+        ? req.body.finalMoneyCents
+        : req.body.finalMoney;
+      const cents = parseCentsInput(raw);
+      nextFinal = cents === null ? 0 : cents;
+    }
+
+    const nextDiff = nextFinal - nextInitial;
+
+    const doc = await AnnualSummary.findOneAndUpdate(
+      { year },
+      { $set: { initialMoneyCents: nextInitial, finalMoneyCents: nextFinal, diffMoneyCents: nextDiff } },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    ).lean();
+
+    return res.json({
+      success: true,
+      data: {
+        year: doc.year,
+        initialMoneyCents: doc.initialMoneyCents || 0,
+        finalMoneyCents: doc.finalMoneyCents || 0,
+        diffMoneyCents: doc.diffMoneyCents || 0
+      }
+    });
+  } catch (e) {
+    console.error('income year save error', e);
+    return res.status(500).json({ success: false, error: 'income year save failed' });
   }
 });
 

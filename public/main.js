@@ -922,6 +922,22 @@ async function saveMonthlyIncome(year, month, payload) {
   }
 }
 
+async function saveYearMoney(year, payload) {
+  if (!year) return false;
+  try {
+    const resp = await fetch('/income/year', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ year, ...payload })
+    });
+    if (!resp.ok) throw new Error('income year save failed');
+    return true;
+  } catch (e) {
+    console.error(e);
+    return false;
+  }
+}
+
 function createEditableAmountCell(initialCents, onCommit) {
   const cell = document.createElement('div');
   cell.className = 'income-cell income-cell--editable';
@@ -979,6 +995,7 @@ function createEditableAmountCell(initialCents, onCommit) {
 
 function buildIncomeTable(year, data) {
   const months = data && data.months ? data.months : {};
+  const yearSummary = data && data.yearSummary ? data.yearSummary : {};
   const container = document.createElement('div');
   container.className = 'income-table';
   const totals = {
@@ -1124,6 +1141,86 @@ function buildIncomeTable(year, data) {
   totalsRow.appendChild(totalDiff);
 
   container.appendChild(totalsRow);
+
+  const yearMoney = {
+    initialMoneyCents: yearSummary.initialMoneyCents || 0,
+    finalMoneyCents: yearSummary.finalMoneyCents || 0,
+    diffMoneyCents: yearSummary.diffMoneyCents || 0
+  };
+
+  const yearHeader = document.createElement('div');
+  yearHeader.className = 'income-row income-row--summary-header';
+  ['Saldo año', 'Inicio', 'Final', 'Diferencia'].forEach((label) => {
+    const cell = document.createElement('div');
+    cell.className = 'income-cell';
+    cell.innerText = label;
+    yearHeader.appendChild(cell);
+  });
+  container.appendChild(yearHeader);
+
+  const yearRow = document.createElement('div');
+  yearRow.className = 'income-row income-row--summary';
+
+  const yearLabel = document.createElement('div');
+  yearLabel.className = 'income-cell income-cell--label';
+  yearLabel.setAttribute('data-label', 'Saldo año');
+  yearLabel.innerText = 'Saldo año';
+  yearRow.appendChild(yearLabel);
+
+  const yearInitialCell = createEditableAmountCell(yearMoney.initialMoneyCents, async (nextCents, cancelEdit) => {
+    const prev = yearMoney.initialMoneyCents;
+    yearMoney.initialMoneyCents = nextCents;
+    updateYearDiffCell();
+    const ok = await saveYearMoney(year, {
+      initialMoneyCents: yearMoney.initialMoneyCents,
+      finalMoneyCents: yearMoney.finalMoneyCents
+    });
+    if (!ok) {
+      yearMoney.initialMoneyCents = prev;
+      updateYearDiffCell();
+      cancelEdit();
+      showToast('No se pudo guardar el saldo inicial');
+      return false;
+    }
+    return true;
+  });
+  yearInitialCell.setAttribute('data-label', 'Inicio');
+  yearRow.appendChild(yearInitialCell);
+
+  const yearFinalCell = createEditableAmountCell(yearMoney.finalMoneyCents, async (nextCents, cancelEdit) => {
+    const prev = yearMoney.finalMoneyCents;
+    yearMoney.finalMoneyCents = nextCents;
+    updateYearDiffCell();
+    const ok = await saveYearMoney(year, {
+      initialMoneyCents: yearMoney.initialMoneyCents,
+      finalMoneyCents: yearMoney.finalMoneyCents
+    });
+    if (!ok) {
+      yearMoney.finalMoneyCents = prev;
+      updateYearDiffCell();
+      cancelEdit();
+      showToast('No se pudo guardar el saldo final');
+      return false;
+    }
+    return true;
+  });
+  yearFinalCell.setAttribute('data-label', 'Final');
+  yearRow.appendChild(yearFinalCell);
+
+  const yearDiffCell = document.createElement('div');
+  yearDiffCell.className = 'income-cell income-cell--diff';
+  yearDiffCell.setAttribute('data-label', 'Diferencia');
+  yearRow.appendChild(yearDiffCell);
+
+  function updateYearDiffCell() {
+    const diff = yearMoney.finalMoneyCents - yearMoney.initialMoneyCents;
+    yearMoney.diffMoneyCents = diff;
+    yearDiffCell.innerText = formatCentsToAmount(diff);
+    yearDiffCell.classList.toggle('is-negative', diff < 0);
+  }
+
+  updateYearDiffCell();
+  container.appendChild(yearRow);
   recalcTotals();
 
   return container;
