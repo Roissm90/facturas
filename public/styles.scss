@@ -274,6 +274,17 @@ ul {
 @media (max-width: 767px) {
   .income-row {
     grid-template-columns: 1fr;
+
+    &.income-row--summary {
+      background: #eef2ff;
+      border-color: #c7d2fe;
+    }
+
+    &.income-row--summary-header { 
+      height: 0;
+      padding: 0;
+      border: 0;
+    }
   }
 
   .income-row--header {

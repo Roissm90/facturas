@@ -1623,37 +1623,53 @@ function showToast(msg, timeout = 3000) {
 fetchList();
 setUploadButtonLabel(false);
 
-jQuery(document).on('click', '.income-cell[data-label="Mes"]', function() {
-  if (window.innerWidth >= 768) {
-    return;
-  }
-  //console.log('Row clicked:', this);
-  let $row = jQuery(this).closest('.income-row');
-  let cells = $row.find('.income-cell');
-  let cellsToToggle = cells.not('.income-cell--label');
-  
+function toggleIncomeRow($row) {
+  const cellsToToggle = $row.find('.income-cell').not('.income-cell--label');
+
   if ($row.hasClass('is-expanded')) {
     // Si ya está desplegada, cerrarla
     cellsToToggle.slideUp(300, function() {
       jQuery(this).css('display', '');
     });
     $row.removeClass('is-expanded');
-  } else {
-    // Cerrar todas las demás filas primero
-    jQuery('.income-row.is-expanded').each(function() {
-      let otherCells = jQuery(this).find('.income-cell').not('.income-cell--label');
-      otherCells.slideUp(300, function() {
-        jQuery(this).css('display', '');
-      });
-      jQuery(this).removeClass('is-expanded');
-    });
-    
-    // Abrir la actual
-    cellsToToggle.each(function() {
-      jQuery(this).css('display', 'flex').hide().slideDown(300);
-    });
-    $row.addClass('is-expanded');
+    return;
   }
+
+  // Cerrar todas las demás filas primero
+  jQuery('.income-row.is-expanded').each(function() {
+    const otherCells = jQuery(this).find('.income-cell').not('.income-cell--label');
+    otherCells.slideUp(300, function() {
+      jQuery(this).css('display', '');
+    });
+    jQuery(this).removeClass('is-expanded');
+  });
+
+  // Abrir la actual
+  cellsToToggle.each(function() {
+    jQuery(this).css('display', 'flex').hide().slideDown(300);
+  });
+  $row.addClass('is-expanded');
+}
+
+jQuery(document).on('click', '.income-cell[data-label="Mes"]', function() {
+  if (window.innerWidth >= 768) {
+    return;
+  }
+  //console.log('Row clicked:', this);
+  const $row = jQuery(this).closest('.income-row');
+  toggleIncomeRow($row);
+});
+
+jQuery(document).on('click', '.income-cell--label', function() {
+  if (window.innerWidth >= 768) {
+    return;
+  }
+  const label = jQuery(this).attr('data-label');
+  if (label !== 'Totales' && label !== 'Saldo año') {
+    return;
+  }
+  const $row = jQuery(this).closest('.income-row');
+  toggleIncomeRow($row);
 });
 
 function resetIncomeRowsOnDesktop() {
