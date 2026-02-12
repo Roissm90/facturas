@@ -940,6 +940,7 @@ function createEditableAmountCell(initialCents, onCommit) {
     cell.appendChild(input);
     input.focus();
     input.select();
+    debugger;
 
     const cancel = () => {
       cell.classList.remove('is-editing');
@@ -1525,12 +1526,12 @@ function showToast(msg, timeout = 3000) {
 fetchList();
 setUploadButtonLabel(false);
 
-jQuery(document).on('click', '.income-row', function() {
+jQuery(document).on('click', '.income-cell[data-label="Mes"]', function() {
   if (window.innerWidth >= 768) {
     return;
   }
   //console.log('Row clicked:', this);
-  let $row = jQuery(this);
+  let $row = jQuery(this).closest('.income-row');
   let cells = $row.find('.income-cell');
   let cellsToToggle = cells.not('.income-cell--label');
   
@@ -1557,3 +1558,18 @@ jQuery(document).on('click', '.income-row', function() {
     $row.addClass('is-expanded');
   }
 });
+
+function resetIncomeRowsOnDesktop() {
+  if (window.innerWidth < 768) {
+    return;
+  }
+  jQuery('.income-row.is-expanded').each(function() {
+    const $row = jQuery(this);
+    const $cells = $row.find('.income-cell').not('.income-cell--label');
+    $cells.stop(true, true).css('display', '');
+    $row.removeClass('is-expanded');
+  });
+}
+
+window.addEventListener('resize', resetIncomeRowsOnDesktop);
+resetIncomeRowsOnDesktop();

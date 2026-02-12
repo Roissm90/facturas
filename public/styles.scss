@@ -234,6 +234,8 @@ ul {
     border-radius: $border-radius;
     padding: 4px 6px;
     font-size: 14px;
+    text-align: center;
+    transition: text-align 0.2s ease;
 
     &:focus {
       outline: none;
@@ -265,6 +267,20 @@ ul {
       content: attr(data-label);
       color: $text-light;
       font-weight: 600;
+    }
+  }
+
+  .income-cell--editable {
+    input {
+      text-align: right;
+      width: fit-content;
+      max-width: 110px;
+    }
+
+    &.is-editing {
+      &::before {
+        margin-top: 4px;
+      }
     }
   }
 }

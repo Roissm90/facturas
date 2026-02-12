@@ -179,6 +179,8 @@ ul {
   border-radius: 6px;
   padding: 4px 6px;
   font-size: 14px;
+  text-align: center;
+  transition: text-align 0.2s ease;
 }
 .income-cell--editable input:focus {
   outline: none;
@@ -205,6 +207,14 @@ ul {
     content: attr(data-label);
     color: #6b7280;
     font-weight: 600;
+  }
+  .income-cell--editable input {
+    text-align: right;
+    width: fit-content;
+    max-width: 110px;
+  }
+  .income-cell--editable.is-editing::before {
+    margin-top: 4px;
   }
 }
 @media (max-width: 767px) {
