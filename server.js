@@ -9,6 +9,7 @@ const crypto = require('crypto');
 const cloudinary = require('cloudinary').v2;
 const archiver = require('archiver');
 const ExcelJS = require('exceljs');
+const XLSX = require('xlsx');
 const https = require('https');
 const http = require('http');
 
@@ -1138,126 +1139,133 @@ app.post('/income/upload-excel', upload.single('excel'), async (req, res) => {
       });
     }
 
-    // Excel antiguo (.xls) no es soportado directamente por ExcelJS
-    if (isXls && !isXlsx) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Por favor, guarda el archivo como .xlsx (Excel 2007 o superior). Los archivos .xls antiguos no están soportados.' 
-      });
-    }
-
     console.log('📊 Procesando Excel:', fileName, 'Size:', req.file.size, 'bytes');
     
-    // Detectar si el archivo es realmente un Excel o es HTML/CSV disfrazado
+    // Detectar si el archivo es HTML disfrazado
     const bufferStart = req.file.buffer.slice(0, 100).toString('utf8', 0, 100);
     if (bufferStart.includes('<html') || bufferStart.includes('<!DOCTYPE') || bufferStart.includes('<table')) {
       console.error('Archivo detectado como HTML, no Excel');
       return res.status(400).json({ 
         success: false, 
-        error: 'El archivo parece ser HTML en lugar de Excel. Por favor:\n1. Abre el archivo en Excel o LibreOffice\n2. Ve a "Archivo → Guardar como"\n3. Selecciona formato "Libro de Excel (.xlsx)"\n4. Vuelve a intentar subir el archivo' 
+        error: 'El archivo parece ser HTML. Abre el archivo en Excel, guárdalo como .xlsx y vuelve a intentar.' 
       });
     }
     
-    const workbook = new ExcelJS.Workbook();
-    
+    // Usar SheetJS (xlsx) que es más tolerante con diferentes formatos
+    let workbook;
     try {
-      await workbook.xlsx.load(req.file.buffer);
+      workbook = XLSX.read(req.file.buffer, { type: 'buffer', cellDates: true });
+      console.log('📚 Workbook cargado con SheetJS. Hojas:', workbook.SheetNames.length);
     } catch (loadError) {
-      console.error('Error loading Excel:', loadError.message);
+      console.error('Error loading Excel con SheetJS:', loadError.message);
       return res.status(400).json({ 
         success: false, 
-        error: 'No se pudo leer el archivo Excel. El archivo puede estar corrupto o no ser un formato Excel válido. Por favor:\n1. Abre el archivo en Excel\n2. Guárdalo como .xlsx nuevo\n3. Vuelve a intentar' 
+        error: 'No se pudo leer el archivo Excel. Abre el archivo en Excel, guárdalo como .xlsx nuevo y vuelve a intentar.' 
       });
     }
     
-    console.log('📚 Workbook cargado. Número de hojas:', workbook.worksheets.length);
-    
-    if (workbook.worksheets.length === 0) {
+    if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
       console.error('El workbook no tiene hojas');
       return res.status(400).json({ 
         success: false, 
-        error: 'El archivo Excel no contiene hojas de cálculo. Asegúrate de que el archivo tiene datos y guárdalo como .xlsx desde Excel.' 
+       error: 'El archivo Excel no contiene hojas de cálculo. Abre el archivo en Excel y guárdalo como .xlsx nuevo.' 
       });
     }
+
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    console.log('📄 Procesando hoja:', sheetName);
+
+    // Convertir a array de objetos (JSON)
+    const data = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false, dateNF: 'dd/mm/yyyy' });
     
-    const worksheet = workbook.worksheets[0];
-    if (!worksheet) {
-      console.error('No se pudo acceder a la primera hoja');
+    if (!data || data.length === 0) {
+      console.error('La hoja está vacía');
       return res.status(400).json({ 
         success: false, 
-        error: 'No se pudo leer la primera hoja del Excel. Intenta guardar el archivo como .xlsx nuevo desde Excel.' 
+        error: 'La hoja de Excel está vacía' 
       });
     }
 
-    console.log('📄 Hoja encontrada:', worksheet.name, 'Filas:', worksheet.rowCount, 'Columnas:', worksheet.columnCount);
+    console.log(`📄 Total de filas: ${data.length}`);
 
     // Buscar encabezados en las primeras 10 filas
-    let headerRow = null;
     let headerRowIndex = -1;
     let dateColIndex = -1;
     let amountColIndex = -1;
 
-    for (let i = 1; i <= Math.min(10, worksheet.rowCount); i++) {
-      const row = worksheet.getRow(i);
+    for (let i = 0; i < Math.min(10, data.length); i++) {
+      const row = data[i];
+      if (!row) continue;
+      
       let foundDate = false;
       let foundAmount = false;
       
-      row.eachCell((cell, colNumber) => {
-        const cellValue = String(cell.value || '').toLowerCase().trim();
-        // Buscar columna de fecha (FECHA OPERACIÓN o FECHA VALOR)
+      row.forEach((cell, colIndex) => {
+        const cellValue = String(cell || '').toLowerCase().trim();
+        
+        // Buscar columna de fecha
         if (cellValue.includes('fecha') && (cellValue.includes('operaci') || cellValue.includes('valor'))) {
-          dateColIndex = colNumber;
+          dateColIndex = colIndex;
           foundDate = true;
-          console.log(`✅ Columna FECHA encontrada en posición ${colNumber}: "${cell.value}"`);
+          console.log(`✅ Columna FECHA encontrada en posición ${colIndex}: "${cell}"`);
         }
-        // Buscar columna de importe (IMPORTE EUR o similar)
+        
+        // Buscar columna de importe
         if (cellValue.includes('importe') && cellValue.includes('eur')) {
-          amountColIndex = colNumber;
+          amountColIndex = colIndex;
           foundAmount = true;
-          console.log(`✅ Columna IMPORTE encontrada en posición ${colNumber}: "${cell.value}"`);
+          console.log(`✅ Columna IMPORTE encontrada en posición ${colIndex}: "${cell}"`);
         }
       });
 
       if (foundDate && foundAmount) {
-        headerRow = row;
         headerRowIndex = i;
-        console.log(`✅ Encabezados encontrados en fila ${i}`);
+        console.log(`✅ Encabezados encontrados en fila ${i + 1}`);
         break;
       }
     }
 
-    if (!headerRow || dateColIndex === -1 || amountColIndex === -1) {
+    if (headerRowIndex === -1 || dateColIndex === -1 || amountColIndex === -1) {
       console.error('Columnas no encontradas. dateCol:', dateColIndex, 'amountCol:', amountColIndex);
+      // Mostrar las primeras 3 filas para debugging
+      console.log('Primeras 3 filas del archivo:');
+      data.slice(0, 3).forEach((row, i) => {
+        console.log(`Fila ${i}:`, row);
+      });
       return res.status(400).json({ 
         success: false, 
-        error: 'No se encontraron las columnas necesarias. El Excel debe tener una columna "FECHA OPERACIÓN" (o "FECHA VALOR") y una columna "IMPORTE EUR"' 
+        error: 'No se encontraron las columnas "FECHA OPERACIÓN" (o "FECHA VALOR") e "IMPORTE EUR". Verifica que el archivo tiene estos encabezados.' 
       });
     }
 
     // Procesar filas de datos
     const movements = [];
-    for (let i = headerRowIndex + 1; i <= worksheet.rowCount; i++) {
-      const row = worksheet.getRow(i);
-      const dateCell = row.getCell(dateColIndex);
-      const amountCell = row.getCell(amountColIndex);
+    for (let i = headerRowIndex + 1; i < data.length; i++) {
+      const row = data[i];
+      if (!row) continue;
 
-      if (!dateCell.value) continue;
+      const dateValue = row[dateColIndex];
+      const amountValue = row[amountColIndex];
 
+      if (!dateValue) continue;
+
+      // Parsear fecha
       let date = null;
-      // Intentar parsear la fecha
-      if (dateCell.value instanceof Date) {
-        date = dateCell.value;
-      } else if (typeof dateCell.value === 'string') {
-        date = parseDateFlexible(dateCell.value);
-      } else if (typeof dateCell.value === 'number') {
+      if (dateValue instanceof Date) {
+        date = dateValue;
+      } else if (typeof dateValue === 'string') {
+        date = parseDateFlexible(dateValue);
+      } else if (typeof dateValue === 'number') {
         // Excel serial date
         const excelEpoch = new Date(1899, 11, 30);
-        date = new Date(excelEpoch.getTime() + dateCell.value * 86400000);
+        date = new Date(excelEpoch.getTime() + dateValue * 86400000);
       }
 
       if (!date || isNaN(date.getTime())) continue;
 
-      const amountText = String(amountCell.value || '').trim();
+      // Parsear monto
+      const amountText = String(amountValue || '').trim();
       if (!amountText) continue;
 
       const amountCents = parseAmountToCents(amountText);
@@ -1273,7 +1281,7 @@ app.post('/income/upload-excel', upload.single('excel'), async (req, res) => {
       console.error('No se encontraron movimientos válidos');
       return res.status(400).json({ 
         success: false, 
-        error: 'No se encontraron movimientos válidos en el Excel' 
+        error: 'No se encontraron movimientos válidos. Verifica que el archivo tiene datos después de los encabezados.' 
       });
     }
 
@@ -1341,6 +1349,84 @@ app.post('/income/upload-excel', upload.single('excel'), async (req, res) => {
   } catch (e) {
     console.error('❌ upload excel error', e);
     return res.status(500).json({ success: false, error: 'Error al procesar el Excel: ' + e.message });
+  }
+});
+
+// Endpoint de debugging para analizar archivos Excel problemáticos
+app.post('/income/debug-excel', upload.single('excel'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const debug = {
+      fileName: req.file.originalname,
+      fileSize: req.file.size,
+      mimeType: req.file.mimetype,
+      bufferStart: req.file.buffer.slice(0, 200).toString('utf8', 0, 200),
+      isHTML: req.file.buffer.slice(0, 100).toString('utf8', 0, 100).includes('<html'),
+      excelJSInfo: {},
+      rawData: []
+    };
+
+    // Intentar cargar con ExcelJS
+    try {
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(req.file.buffer);
+      
+      debug.excelJSInfo = {
+        worksheetsLength: workbook.worksheets.length,
+        _worksheetsLength: workbook._worksheets ? workbook._worksheets.length : 0,
+        worksheetNames: workbook.worksheets.map(ws => ws.name),
+        properties: workbook.properties
+      };
+
+      // Intentar leer datos de la primera hoja (cualquier método)
+      let worksheet = null;
+      if (workbook.worksheets.length > 0) {
+        worksheet = workbook.worksheets[0];
+      } else if (workbook._worksheets && workbook._worksheets.length > 1) {
+        worksheet = workbook._worksheets[1];
+      }
+
+      if (worksheet) {
+        debug.worksheetInfo = {
+          name: worksheet.name,
+          rowCount: worksheet.rowCount,
+          columnCount: worksheet.columnCount,
+          actualRowCount: worksheet.actualRowCount,
+          actualColumnCount: worksheet.actualColumnCount
+        };
+
+        // Leer primeras 20 filas para análisis
+        const maxRows = Math.min(20, worksheet.rowCount || 20);
+        for (let i = 1; i <= maxRows; i++) {
+          const row = worksheet.getRow(i);
+          const rowData = [];
+          row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+            rowData.push({
+              col: colNumber,
+              value: cell.value,
+              type: typeof cell.value,
+              text: cell.text
+            });
+          });
+          if (rowData.length > 0) {
+            debug.rawData.push({ row: i, cells: rowData });
+          }
+        }
+      }
+    } catch (e) {
+      debug.excelJSInfo.error = e.message;
+      debug.excelJSInfo.stack = e.stack;
+    }
+
+    console.log('🔍 DEBUG INFO:', JSON.stringify(debug, null, 2));
+    return res.json(debug);
+
+  } catch (e) {
+    console.error('Debug error:', e);
+    return res.status(500).json({ error: e.message, stack: e.stack });
   }
 });
 
