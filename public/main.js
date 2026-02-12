@@ -1670,3 +1670,146 @@ function resetIncomeRowsOnDesktop() {
 
 window.addEventListener('resize', resetIncomeRowsOnDesktop);
 resetIncomeRowsOnDesktop();
+
+// Modal para subir Excel con selección de año y mes
+function showUploadExcelModal(defaultYear) {
+  // Crear overlay
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 10000;';
+  
+  // Crear modal
+  const modal = document.createElement('div');
+  modal.style.cssText = 'background: white; border-radius: 8px; padding: 24px; max-width: 500px; width: 90%; box-shadow: 0 4px 6px rgba(0,0,0,0.1);';
+  
+  // Título
+  const title = document.createElement('h2');
+  title.textContent = '📊 Subir Excel de movimientos';
+  title.style.cssText = 'margin: 0 0 20px 0; font-size: 20px; color: #333;';
+  modal.appendChild(title);
+  
+  // Descripción
+  const description = document.createElement('p');
+  description.textContent = 'Selecciona el año y mes al que pertenecen los movimientos del archivo Excel:';
+  description.style.cssText = 'margin: 0 0 20px 0; color: #666; font-size: 14px;';
+  modal.appendChild(description);
+  
+  // Select de año
+  const yearLabel = document.createElement('label');
+  yearLabel.textContent = 'Año:';
+  yearLabel.style.cssText = 'display: block; margin-bottom: 8px; font-weight: 600; color: #333;';
+  modal.appendChild(yearLabel);
+  
+  const yearSelect = document.createElement('select');
+  yearSelect.style.cssText = 'width: 100%; padding: 8px 12px; margin-bottom: 16px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;';
+  const currentYear = new Date().getFullYear();
+  for (let y = currentYear; y >= currentYear - 5; y--) {
+    const option = document.createElement('option');
+    option.value = y;
+    option.textContent = y;
+    if (y === defaultYear) {
+      option.selected = true;
+    }
+    yearSelect.appendChild(option);
+  }
+  modal.appendChild(yearSelect);
+  
+  // Select de mes
+  const monthLabel = document.createElement('label');
+  monthLabel.textContent = 'Mes:';
+  monthLabel.style.cssText = 'display: block; margin-bottom: 8px; font-weight: 600; color: #333;';
+  modal.appendChild(monthLabel);
+  
+  const monthSelect = document.createElement('select');
+  monthSelect.style.cssText = 'width: 100%; padding: 8px 12px; margin-bottom: 16px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;';
+  const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+  monthNames.forEach((name, index) => {
+    const option = document.createElement('option');
+    option.value = String(index + 1).padStart(2, '0');
+    option.textContent = name;
+    monthSelect.appendChild(option);
+  });
+  modal.appendChild(monthSelect);
+  
+  // Input de archivo
+  const fileLabel = document.createElement('label');
+  fileLabel.textContent = 'Archivo Excel:';
+  fileLabel.style.cssText = 'display: block; margin-bottom: 8px; font-weight: 600; color: #333;';
+  modal.appendChild(fileLabel);
+  
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = '.xlsx,.xls';
+  fileInput.style.cssText = 'width: 100%; margin-bottom: 20px; padding: 8px; border: 1px solid #ddd; border-radius: 4px;';
+  modal.appendChild(fileInput);
+  
+  // Botones
+  const buttonsDiv = document.createElement('div');
+  buttonsDiv.style.cssText = 'display: flex; gap: 12px; justify-content: flex-end;';
+  
+  const cancelBtn = document.createElement('button');
+  cancelBtn.textContent = 'Cancelar';
+  cancelBtn.style.cssText = 'padding: 8px 16px; border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer; font-size: 14px;';
+  cancelBtn.onclick = () => {
+    document.body.removeChild(overlay);
+  };
+  buttonsDiv.appendChild(cancelBtn);
+  
+  const uploadBtn = document.createElement('button');
+  uploadBtn.textContent = 'Subir';
+  uploadBtn.style.cssText = 'padding: 8px 16px; border: none; background: #10b981; color: white; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 600;';
+  uploadBtn.onclick = async () => {
+    const file = fileInput.files[0];
+    if (!file) {
+      showToast('Por favor selecciona un archivo', 'error');
+      return;
+    }
+    
+    const year = yearSelect.value;
+    const month = monthSelect.value;
+    
+    uploadBtn.disabled = true;
+    uploadBtn.textContent = 'Subiendo...';
+    
+    try {
+      const formData = new FormData();
+      formData.append('excel', file);
+      formData.append('year', year);
+      formData.append('month', month);
+      
+      const response = await fetch('/income/upload-excel', {
+        method: 'POST',
+        body: formData
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        showToast(result.message || 'Excel subido correctamente', 'success');
+        document.body.removeChild(overlay);
+        renderIncomePanel();
+      } else {
+        showToast(result.error || 'Error al subir el Excel', 'error');
+        uploadBtn.disabled = false;
+        uploadBtn.textContent = 'Subir';
+      }
+    } catch (error) {
+      console.error('Error uploading Excel:', error);
+      showToast('Error al subir el Excel', 'error');
+      uploadBtn.disabled = false;
+      uploadBtn.textContent = 'Subir';
+    }
+  };
+  buttonsDiv.appendChild(uploadBtn);
+  
+  modal.appendChild(buttonsDiv);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  
+  // Cerrar al hacer clic en el overlay
+  overlay.onclick = (e) => {
+    if (e.target === overlay) {
+      document.body.removeChild(overlay);
+    }
+  };
+}
