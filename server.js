@@ -1123,16 +1123,53 @@ app.post('/income/month', async (req, res) => {
 app.post('/income/upload-excel', upload.single('excel'), async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ success: false, error: 'No file uploaded' });
+      return res.status(400).json({ success: false, error: 'No se subió ningún archivo' });
     }
 
+    // Validar que sea un archivo Excel válido
+    const fileName = req.file.originalname || '';
+    const isXlsx = fileName.toLowerCase().endsWith('.xlsx');
+    const isXls = fileName.toLowerCase().endsWith('.xls');
+    
+    if (!isXlsx && !isXls) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'El archivo debe ser un Excel (.xlsx o .xls)' 
+      });
+    }
+
+    // Excel antiguo (.xls) no es soportado directamente por ExcelJS
+    if (isXls && !isXlsx) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Por favor, guarda el archivo como .xlsx (Excel 2007 o superior). Los archivos .xls antiguos no están soportados.' 
+      });
+    }
+
+    console.log('📊 Procesando Excel:', fileName, 'Size:', req.file.size, 'bytes');
+    
     const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(req.file.buffer);
+    
+    try {
+      await workbook.xlsx.load(req.file.buffer);
+    } catch (loadError) {
+      console.error('Error loading Excel:', loadError);
+      return res.status(400).json({ 
+        success: false, 
+        error: 'No se pudo leer el archivo Excel. Asegúrate de que el archivo no esté corrupto y sea formato .xlsx' 
+      });
+    }
     
     const worksheet = workbook.worksheets[0];
     if (!worksheet) {
-      return res.status(400).json({ success: false, error: 'No worksheet found' });
+      console.error('No worksheets found in workbook');
+      return res.status(400).json({ 
+        success: false, 
+        error: 'El archivo Excel no contiene ninguna hoja de cálculo' 
+      });
     }
+
+    console.log('📄 Hoja encontrada:', worksheet.name, 'Filas:', worksheet.rowCount);
 
     // Buscar encabezados en las primeras 10 filas
     let headerRow = null;
@@ -1151,25 +1188,29 @@ app.post('/income/upload-excel', upload.single('excel'), async (req, res) => {
         if (cellValue.includes('fecha') && (cellValue.includes('operaci') || cellValue.includes('valor'))) {
           dateColIndex = colNumber;
           foundDate = true;
+          console.log(`✅ Columna FECHA encontrada en posición ${colNumber}: "${cell.value}"`);
         }
         // Buscar columna de importe (IMPORTE EUR o similar)
-        if (cellValue.includes('importe') || cellValue.includes('eur')) {
+        if (cellValue.includes('importe') && cellValue.includes('eur')) {
           amountColIndex = colNumber;
           foundAmount = true;
+          console.log(`✅ Columna IMPORTE encontrada en posición ${colNumber}: "${cell.value}"`);
         }
       });
 
       if (foundDate && foundAmount) {
         headerRow = row;
         headerRowIndex = i;
+        console.log(`✅ Encabezados encontrados en fila ${i}`);
         break;
       }
     }
 
     if (!headerRow || dateColIndex === -1 || amountColIndex === -1) {
+      console.error('Columnas no encontradas. dateCol:', dateColIndex, 'amountCol:', amountColIndex);
       return res.status(400).json({ 
         success: false, 
-        error: 'No se encontraron las columnas necesarias (FECHA y IMPORTE EUR)' 
+        error: 'No se encontraron las columnas necesarias. El Excel debe tener una columna "FECHA OPERACIÓN" (o "FECHA VALOR") y una columna "IMPORTE EUR"' 
       });
     }
 
@@ -1209,11 +1250,14 @@ app.post('/income/upload-excel', upload.single('excel'), async (req, res) => {
     }
 
     if (movements.length === 0) {
+      console.error('No se encontraron movimientos válidos');
       return res.status(400).json({ 
         success: false, 
         error: 'No se encontraron movimientos válidos en el Excel' 
       });
     }
+
+    console.log(`✅ ${movements.length} movimientos encontrados`);
 
     // Agrupar por año-mes y sumar ingresos/gastos
     const summary = {};
@@ -1238,10 +1282,13 @@ app.post('/income/upload-excel', upload.single('excel'), async (req, res) => {
       }
     }
 
+    console.log(`📊 Resumen por meses:`, Object.keys(summary).length, 'meses');
+
     // Guardar en base de datos
     const updates = [];
     for (const key in summary) {
       const data = summary[key];
+      console.log(`  → ${data.year}-${data.month}: Ingresos ${formatCentsToAmount(data.incomeCents)} | Gastos ${formatCentsToAmount(data.expensesCents)}`);
       updates.push(
         MonthlySummary.findOneAndUpdate(
           { year: data.year, month: data.month },
@@ -1258,9 +1305,11 @@ app.post('/income/upload-excel', upload.single('excel'), async (req, res) => {
 
     await Promise.all(updates);
 
+    console.log('✅ Datos guardados en la base de datos');
+
     return res.json({ 
       success: true, 
-      message: `Procesados ${movements.length} movimientos`,
+      message: `Procesados ${movements.length} movimientos de ${Object.keys(summary).length} mes(es)`,
       summary: Object.values(summary).map(s => ({
         year: s.year,
         month: s.month,
@@ -1270,8 +1319,8 @@ app.post('/income/upload-excel', upload.single('excel'), async (req, res) => {
     });
 
   } catch (e) {
-    console.error('upload excel error', e);
-    return res.status(500).json({ success: false, error: 'Error al procesar el Excel' });
+    console.error('❌ upload excel error', e);
+    return res.status(500).json({ success: false, error: 'Error al procesar el Excel: ' + e.message });
   }
 });
 
