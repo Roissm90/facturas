@@ -172,6 +172,8 @@ ul {
   align-self: flex-start;
   width: 100%;
   max-width: 480px;
+
+  @media (max-width: 767px) { max-width: none; }
 }
 
 .income-row {

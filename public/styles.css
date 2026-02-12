@@ -121,6 +121,11 @@ ul {
   width: 100%;
   max-width: 480px;
 }
+@media (max-width: 767px) {
+  .income-excel-btn {
+    max-width: none;
+  }
+}
 
 .income-row {
   display: grid;
