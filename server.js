@@ -1148,28 +1148,48 @@ app.post('/income/upload-excel', upload.single('excel'), async (req, res) => {
 
     console.log('📊 Procesando Excel:', fileName, 'Size:', req.file.size, 'bytes');
     
+    // Detectar si el archivo es realmente un Excel o es HTML/CSV disfrazado
+    const bufferStart = req.file.buffer.slice(0, 100).toString('utf8', 0, 100);
+    if (bufferStart.includes('<html') || bufferStart.includes('<!DOCTYPE') || bufferStart.includes('<table')) {
+      console.error('Archivo detectado como HTML, no Excel');
+      return res.status(400).json({ 
+        success: false, 
+        error: 'El archivo parece ser HTML en lugar de Excel. Por favor:\n1. Abre el archivo en Excel o LibreOffice\n2. Ve a "Archivo → Guardar como"\n3. Selecciona formato "Libro de Excel (.xlsx)"\n4. Vuelve a intentar subir el archivo' 
+      });
+    }
+    
     const workbook = new ExcelJS.Workbook();
     
     try {
       await workbook.xlsx.load(req.file.buffer);
     } catch (loadError) {
-      console.error('Error loading Excel:', loadError);
+      console.error('Error loading Excel:', loadError.message);
       return res.status(400).json({ 
         success: false, 
-        error: 'No se pudo leer el archivo Excel. Asegúrate de que el archivo no esté corrupto y sea formato .xlsx' 
+        error: 'No se pudo leer el archivo Excel. El archivo puede estar corrupto o no ser un formato Excel válido. Por favor:\n1. Abre el archivo en Excel\n2. Guárdalo como .xlsx nuevo\n3. Vuelve a intentar' 
+      });
+    }
+    
+    console.log('📚 Workbook cargado. Número de hojas:', workbook.worksheets.length);
+    
+    if (workbook.worksheets.length === 0) {
+      console.error('El workbook no tiene hojas');
+      return res.status(400).json({ 
+        success: false, 
+        error: 'El archivo Excel no contiene hojas de cálculo. Asegúrate de que el archivo tiene datos y guárdalo como .xlsx desde Excel.' 
       });
     }
     
     const worksheet = workbook.worksheets[0];
     if (!worksheet) {
-      console.error('No worksheets found in workbook');
+      console.error('No se pudo acceder a la primera hoja');
       return res.status(400).json({ 
         success: false, 
-        error: 'El archivo Excel no contiene ninguna hoja de cálculo' 
+        error: 'No se pudo leer la primera hoja del Excel. Intenta guardar el archivo como .xlsx nuevo desde Excel.' 
       });
     }
 
-    console.log('📄 Hoja encontrada:', worksheet.name, 'Filas:', worksheet.rowCount);
+    console.log('📄 Hoja encontrada:', worksheet.name, 'Filas:', worksheet.rowCount, 'Columnas:', worksheet.columnCount);
 
     // Buscar encabezados en las primeras 10 filas
     let headerRow = null;
