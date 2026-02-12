@@ -1221,6 +1221,14 @@ function buildIncomeTable(year, data) {
 
   updateYearDiffCell();
   container.appendChild(yearRow);
+
+  const exportIncomeBtn = document.createElement('button');
+  exportIncomeBtn.className = 'income-excel-btn';
+  exportIncomeBtn.innerText = 'Descargar Excel ingresos';
+  exportIncomeBtn.onclick = async () => {
+    await downloadExcel(exportIncomeBtn, `/export/income/${year}`, `ingresos_${year}.xlsx`);
+  };
+  container.appendChild(exportIncomeBtn);
   recalcTotals();
 
   return container;

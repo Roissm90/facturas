@@ -167,6 +167,13 @@ ul {
   margin-top: $spacing-md;
 }
 
+.income-excel-btn {
+  margin: $spacing-lg auto $spacing-md;
+  align-self: flex-start;
+  width: 100%;
+  max-width: 480px;
+}
+
 .income-row {
   display: grid;
   grid-template-columns: 1.2fr repeat(4, 1fr);

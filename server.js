@@ -33,6 +33,7 @@ const APP_PASSWORD = process.env.APP_PASSWORD || '';
 const INVOICE_DATA_KEY = process.env.INVOICE_DATA_KEY || '';
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const OTHER_EXPENSE_MIN_CENTS = 80000;
+const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 const AUTH_TOKEN = APP_PASSWORD
   ? crypto.createHash('sha256').update(APP_PASSWORD).digest('hex')
   : null;
@@ -316,6 +317,118 @@ function parseAmountToCents(value) {
 function formatCentsToAmount(cents) {
   const value = (cents || 0) / 100;
   return value.toFixed(2).replace('.', ',');
+}
+
+async function buildIncomeExcelBuffer(year, months, yearSummary) {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet(`Ingresos ${year}`);
+
+  worksheet.columns = [
+    { header: 'Mes', key: 'month' },
+    { header: 'Gastos', key: 'expenses' },
+    { header: 'Ingresos', key: 'income' },
+    { header: 'Otros gastos', key: 'other' },
+    { header: 'Diferencia', key: 'diff' },
+    { header: '', key: 'spacer', width: 3 },
+    { header: 'Saldo año', key: 'yearLabel' },
+    { header: 'Inicio Año', key: 'yearInitial' },
+    { header: 'Final Año', key: 'yearFinal' },
+    { header: 'Diferencia', key: 'yearDiff' }
+  ];
+
+  const totals = {
+    expensesCents: 0,
+    incomeCents: 0,
+    otherExpenseCents: 0,
+    diffCents: 0
+  };
+
+  MONTH_NAMES.forEach((monthLabel, index) => {
+    const monthKey = String(index + 1).padStart(2, '0');
+    const rowData = months[monthKey] || {
+      expensesCents: 0,
+      incomeCents: 0,
+      otherExpenseCents: OTHER_EXPENSE_MIN_CENTS
+    };
+
+    const diff = (rowData.incomeCents || 0) - ((rowData.expensesCents || 0) + (rowData.otherExpenseCents || 0));
+    totals.expensesCents += rowData.expensesCents || 0;
+    totals.incomeCents += rowData.incomeCents || 0;
+    totals.otherExpenseCents += rowData.otherExpenseCents || 0;
+    totals.diffCents += diff;
+
+    worksheet.addRow({
+      month: monthLabel,
+      expenses: formatCentsToAmount(rowData.expensesCents || 0),
+      income: formatCentsToAmount(rowData.incomeCents || 0),
+      other: formatCentsToAmount(rowData.otherExpenseCents || 0),
+      diff: formatCentsToAmount(diff)
+    });
+  });
+
+  const totalRow = worksheet.addRow({
+    month: 'Totales',
+    expenses: formatCentsToAmount(totals.expensesCents),
+    income: formatCentsToAmount(totals.incomeCents),
+    other: formatCentsToAmount(totals.otherExpenseCents),
+    diff: formatCentsToAmount(totals.diffCents)
+  });
+
+  const yearDiff = (yearSummary.finalMoneyCents || 0) - (yearSummary.initialMoneyCents || 0);
+  const yearRow = worksheet.getRow(2);
+  yearRow.getCell(7).value = 'Saldo año';
+  yearRow.getCell(8).value = formatCentsToAmount(yearSummary.initialMoneyCents || 0);
+  yearRow.getCell(9).value = formatCentsToAmount(yearSummary.finalMoneyCents || 0);
+  yearRow.getCell(10).value = formatCentsToAmount(yearDiff);
+
+  const headerRow = worksheet.getRow(1);
+  [1, 2, 3, 4, 5, 7, 8, 9, 10].forEach((col) => {
+    const cell = headerRow.getCell(col);
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF000000' }
+    };
+    cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+  });
+
+  totalRow.eachCell((cell, colNumber) => {
+    if (colNumber > 5) return;
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF3E9600' }
+    };
+    cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+  });
+
+  [7, 8, 9, 10].forEach((col) => {
+    const cell = yearRow.getCell(col);
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF3E9600' }
+    };
+    cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+  });
+
+  const maxLengths = worksheet.columns.map((column) => String(column.header).length);
+  worksheet.eachRow((row) => {
+    row.height = 32;
+    row.eachCell((cell, colNumber) => {
+      const value = cell.value === null || cell.value === undefined ? '' : String(cell.value);
+      if (value.length > maxLengths[colNumber - 1]) {
+        maxLengths[colNumber - 1] = value.length;
+      }
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    });
+  });
+
+  worksheet.columns.forEach((column, index) => {
+    column.width = maxLengths[index] + 2;
+  });
+
+  return workbook.xlsx.writeBuffer();
 }
 
 function parseCentsInput(value) {
@@ -779,6 +892,60 @@ app.get('/export/year/:year', async (req, res) => {
     return res.end(buffer);
   } catch (e) {
     console.error('export year error', e);
+    return res.status(500).send('internal');
+  }
+});
+
+app.get('/export/income/:year', async (req, res) => {
+  try {
+    const year = String(req.params.year);
+    const months = Object.fromEntries(
+      Array.from({ length: 12 }, (_, i) => {
+        const key = String(i + 1).padStart(2, '0');
+        return [key, { expensesCents: 0, incomeCents: 0, otherExpenseCents: OTHER_EXPENSE_MIN_CENTS }];
+      })
+    );
+
+    const invoices = await Invoice.find({ year }).lean();
+    for (const doc of invoices) {
+      if (doc.isFuel) continue;
+      const month = String(doc.month || '').padStart(2, '0');
+      if (!months[month]) continue;
+      const totalText = decryptText(doc.totalAmountEnc);
+      const cents = parseAmountToCents(totalText) || 0;
+      months[month].expensesCents += cents;
+    }
+
+    const summaries = await MonthlySummary.find({ year }).lean();
+    for (const summary of summaries) {
+      const month = String(summary.month || '').padStart(2, '0');
+      if (!months[month]) continue;
+      months[month].incomeCents = summary.incomeCents || 0;
+      const otherValue = summary.otherExpenseCents || 0;
+      months[month].otherExpenseCents = Math.max(otherValue, OTHER_EXPENSE_MIN_CENTS);
+    }
+
+    const yearDoc = await AnnualSummary.findOne({ year }).lean();
+    const yearSummary = yearDoc
+      ? {
+        initialMoneyCents: yearDoc.initialMoneyCents || 0,
+        finalMoneyCents: yearDoc.finalMoneyCents || 0,
+        diffMoneyCents: yearDoc.diffMoneyCents || 0
+      }
+      : {
+        initialMoneyCents: 0,
+        finalMoneyCents: 0,
+        diffMoneyCents: 0
+      };
+
+    const buffer = await buildIncomeExcelBuffer(year, months, yearSummary);
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="ingresos_${year}.xlsx"`);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.end(buffer);
+  } catch (e) {
+    console.error('export income error', e);
     return res.status(500).send('internal');
   }
 });

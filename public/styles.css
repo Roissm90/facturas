@@ -115,6 +115,13 @@ ul {
   margin-top: 12px;
 }
 
+.income-excel-btn {
+  margin: 16px auto 12px;
+  align-self: flex-start;
+  width: 100%;
+  max-width: 480px;
+}
+
 .income-row {
   display: grid;
   grid-template-columns: 1.2fr repeat(4, 1fr);
