@@ -1194,46 +1194,7 @@ function buildIncomeTable(year, data) {
   uploadExcelBtn.className = 'income-excel-btn income-upload-btn';
   uploadExcelBtn.innerText = '📊 Subir Excel de movimientos';
   uploadExcelBtn.onclick = () => {
-    const fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.accept = '.xlsx,.xls';
-    fileInput.onchange = async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      
-      const prevText = uploadExcelBtn.innerText;
-      uploadExcelBtn.disabled = true;
-      uploadExcelBtn.innerText = 'Procesando...';
-      
-      try {
-        const formData = new FormData();
-        formData.append('excel', file);
-        
-        const resp = await fetch('/income/upload-excel', {
-          method: 'POST',
-          body: formData
-        });
-        
-        const result = await resp.json();
-        
-        if (!resp.ok || !result.success) {
-          throw new Error(result.error || 'Error al procesar el Excel');
-        }
-        
-        showToast(`✅ ${result.message}`, 5000);
-        
-        // Recargar la tabla
-        await renderIncomePanel();
-        
-      } catch (err) {
-        console.error('Error uploading excel:', err);
-        showToast('❌ ' + err.message, 5000);
-      } finally {
-        uploadExcelBtn.disabled = false;
-        uploadExcelBtn.innerText = prevText;
-      }
-    };
-    fileInput.click();
+    showUploadExcelModal(year);
   };
   container.appendChild(uploadExcelBtn);
 

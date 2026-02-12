@@ -1127,6 +1127,17 @@ app.post('/income/upload-excel', upload.single('excel'), async (req, res) => {
       return res.status(400).json({ success: false, error: 'No se subió ningún archivo' });
     }
 
+    // Obtener año y mes seleccionados por el usuario
+    const targetYear = req.body.year ? String(req.body.year) : null;
+    const targetMonth = req.body.month ? String(req.body.month).padStart(2, '0') : null;
+
+    if (!targetYear || !targetMonth) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Debes seleccionar el año y mes' 
+      });
+    }
+
     // Validar que sea un archivo Excel válido
     const fileName = req.file.originalname || '';
     const isXlsx = fileName.toLowerCase().endsWith('.xlsx');
@@ -1139,7 +1150,7 @@ app.post('/income/upload-excel', upload.single('excel'), async (req, res) => {
       });
     }
 
-    console.log('📊 Procesando Excel:', fileName, 'Size:', req.file.size, 'bytes');
+    console.log('📊 Procesando Excel:', fileName, 'Size:', req.file.size, 'bytes', 'para:', targetYear, '-', targetMonth);
     
     // Detectar si el archivo es HTML disfrazado
     const bufferStart = req.file.buffer.slice(0, 100).toString('utf8', 0, 100);
@@ -1189,27 +1200,18 @@ app.post('/income/upload-excel', upload.single('excel'), async (req, res) => {
 
     console.log(`📄 Total de filas: ${data.length}`);
 
-    // Buscar encabezados en las primeras 10 filas
+    // Buscar columna de IMPORTE EUR
     let headerRowIndex = -1;
-    let dateColIndex = -1;
     let amountColIndex = -1;
 
     for (let i = 0; i < Math.min(10, data.length); i++) {
       const row = data[i];
       if (!row) continue;
       
-      let foundDate = false;
       let foundAmount = false;
       
       row.forEach((cell, colIndex) => {
         const cellValue = String(cell || '').toLowerCase().trim();
-        
-        // Buscar columna de fecha
-        if (cellValue.includes('fecha') && (cellValue.includes('operaci') || cellValue.includes('valor'))) {
-          dateColIndex = colIndex;
-          foundDate = true;
-          console.log(`✅ Columna FECHA encontrada en posición ${colIndex}: "${cell}"`);
-        }
         
         // Buscar columna de importe
         if (cellValue.includes('importe') && cellValue.includes('eur')) {
@@ -1219,15 +1221,15 @@ app.post('/income/upload-excel', upload.single('excel'), async (req, res) => {
         }
       });
 
-      if (foundDate && foundAmount) {
+      if (foundAmount) {
         headerRowIndex = i;
         console.log(`✅ Encabezados encontrados en fila ${i + 1}`);
         break;
       }
     }
 
-    if (headerRowIndex === -1 || dateColIndex === -1 || amountColIndex === -1) {
-      console.error('Columnas no encontradas. dateCol:', dateColIndex, 'amountCol:', amountColIndex);
+    if (headerRowIndex === -1 || amountColIndex === -1) {
+      console.error('Columna IMPORTE no encontrada.');
       // Mostrar las primeras 3 filas para debugging
       console.log('Primeras 3 filas del archivo:');
       data.slice(0, 3).forEach((row, i) => {
@@ -1235,49 +1237,38 @@ app.post('/income/upload-excel', upload.single('excel'), async (req, res) => {
       });
       return res.status(400).json({ 
         success: false, 
-        error: 'No se encontraron las columnas "FECHA OPERACIÓN" (o "FECHA VALOR") e "IMPORTE EUR". Verifica que el archivo tiene estos encabezados.' 
+        error: 'No se encontró la columna "IMPORTE EUR". Verifica que el archivo tiene este encabezado.' 
       });
     }
 
-    // Procesar filas de datos
-    const movements = [];
+    // Procesar filas de datos (solo sumar importes, ignorar fechas)
+    let totalIncomeCents = 0;
+    let totalExpenseCents = 0;
+    let movementCount = 0;
+
     for (let i = headerRowIndex + 1; i < data.length; i++) {
       const row = data[i];
       if (!row) continue;
 
-      const dateValue = row[dateColIndex];
       const amountValue = row[amountColIndex];
-
-      if (!dateValue) continue;
-
-      // Parsear fecha
-      let date = null;
-      if (dateValue instanceof Date) {
-        date = dateValue;
-      } else if (typeof dateValue === 'string') {
-        date = parseDateFlexible(dateValue);
-      } else if (typeof dateValue === 'number') {
-        // Excel serial date
-        const excelEpoch = new Date(1899, 11, 30);
-        date = new Date(excelEpoch.getTime() + dateValue * 86400000);
-      }
-
-      if (!date || isNaN(date.getTime())) continue;
+      if (!amountValue) continue;
 
       // Parsear monto
-      const amountText = String(amountValue || '').trim();
+      const amountText = String(amountValue).trim();
       if (!amountText) continue;
 
       const amountCents = parseAmountToCents(amountText);
       if (amountCents === null) continue;
 
-      movements.push({
-        date: date,
-        amountCents: amountCents
-      });
+      if (amountCents > 0) {
+        totalIncomeCents += amountCents;
+      } else {
+        totalExpenseCents += Math.abs(amountCents);
+      }
+      movementCount++;
     }
 
-    if (movements.length === 0) {
+    if (movementCount === 0) {
       console.error('No se encontraron movimientos válidos');
       return res.status(400).json({ 
         success: false, 
@@ -1285,65 +1276,32 @@ app.post('/income/upload-excel', upload.single('excel'), async (req, res) => {
       });
     }
 
-    console.log(`✅ ${movements.length} movimientos encontrados`);
+    console.log(`✅ ${movementCount} movimientos encontrados`);
+    console.log(`  → Ingresos: ${formatCentsToAmount(totalIncomeCents)} | Gastos: ${formatCentsToAmount(totalExpenseCents)}`);
 
-    // Agrupar por año-mes y sumar ingresos/gastos
-    const summary = {};
-    for (const movement of movements) {
-      const year = String(movement.date.getFullYear());
-      const month = String(movement.date.getMonth() + 1).padStart(2, '0');
-      const key = `${year}-${month}`;
-      
-      if (!summary[key]) {
-        summary[key] = {
-          year,
-          month,
-          incomeCents: 0,
-          expensesCents: 0
-        };
-      }
-
-      if (movement.amountCents > 0) {
-        summary[key].incomeCents += movement.amountCents;
-      } else {
-        summary[key].expensesCents += Math.abs(movement.amountCents);
-      }
-    }
-
-    console.log(`📊 Resumen por meses:`, Object.keys(summary).length, 'meses');
-
-    // Guardar en base de datos
-    const updates = [];
-    for (const key in summary) {
-      const data = summary[key];
-      console.log(`  → ${data.year}-${data.month}: Ingresos ${formatCentsToAmount(data.incomeCents)} | Gastos ${formatCentsToAmount(data.expensesCents)}`);
-      updates.push(
-        MonthlySummary.findOneAndUpdate(
-          { year: data.year, month: data.month },
-          { 
-            $set: { 
-              incomeCents: data.incomeCents,
-              expensesCents: data.expensesCents
-            } 
-          },
-          { upsert: true, new: true, setDefaultsOnInsert: true }
-        )
-      );
-    }
-
-    await Promise.all(updates);
+    // Guardar en base de datos para el mes seleccionado
+    const doc = await MonthlySummary.findOneAndUpdate(
+      { year: targetYear, month: targetMonth },
+      { 
+        $set: { 
+          incomeCents: totalIncomeCents,
+          expensesCents: totalExpenseCents
+        } 
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    ).lean();
 
     console.log('✅ Datos guardados en la base de datos');
 
     return res.json({ 
       success: true, 
-      message: `Procesados ${movements.length} movimientos de ${Object.keys(summary).length} mes(es)`,
-      summary: Object.values(summary).map(s => ({
-        year: s.year,
-        month: s.month,
-        income: formatCentsToAmount(s.incomeCents),
-        expenses: formatCentsToAmount(s.expensesCents)
-      }))
+      message: `Procesados ${movementCount} movimientos para ${MONTH_NAMES[parseInt(targetMonth) - 1]} ${targetYear}`,
+      data: {
+        year: targetYear,
+        month: targetMonth,
+        income: formatCentsToAmount(totalIncomeCents),
+        expenses: formatCentsToAmount(totalExpenseCents)
+      }
     });
 
   } catch (e) {
