@@ -5,7 +5,6 @@ const uploadBtn = document.getElementById('upload-btn');
 const result = document.getElementById('result');
 const resultIncome = document.getElementById('resultIncome');
 const incomeTitle = document.getElementById('income-title');
-const OTHER_EXPENSE_MIN_CENTS = 80000;
 
 // Nombres de meses en español (índice 0 = enero)
 const monthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -1001,13 +1000,12 @@ function buildIncomeTable(year, data) {
   const totals = {
     expensesCents: 0,
     incomeCents: 0,
-    otherExpenseCents: 0,
     diffCents: 0
   };
 
   const header = document.createElement('div');
   header.className = 'income-row income-row--header';
-  ['Mes', 'Gastos', 'Ingresos', 'Otros gastos', 'Diferencia'].forEach((label) => {
+  ['Mes', 'Gastos', 'Ingresos', 'Diferencia'].forEach((label) => {
     const cell = document.createElement('div');
     cell.className = 'income-cell';
     cell.innerText = label;
@@ -1020,14 +1018,12 @@ function buildIncomeTable(year, data) {
   const recalcTotals = () => {
     totals.expensesCents = 0;
     totals.incomeCents = 0;
-    totals.otherExpenseCents = 0;
     totals.diffCents = 0;
 
     rows.forEach(({ rowData, diffCell }) => {
       totals.expensesCents += rowData.expensesCents || 0;
       totals.incomeCents += rowData.incomeCents || 0;
-      totals.otherExpenseCents += rowData.otherExpenseCents || 0;
-      const diff = (rowData.incomeCents || 0) - ((rowData.expensesCents || 0) + (rowData.otherExpenseCents || 0));
+      const diff = (rowData.incomeCents || 0) - (rowData.expensesCents || 0);
       totals.diffCents += diff;
       diffCell.innerText = formatCentsToAmount(diff);
       diffCell.classList.toggle('is-negative', diff < 0);
@@ -1035,7 +1031,6 @@ function buildIncomeTable(year, data) {
 
     totalExpenses.innerText = formatCentsToAmount(totals.expensesCents);
     totalIncome.innerText = formatCentsToAmount(totals.incomeCents);
-    totalOther.innerText = formatCentsToAmount(totals.otherExpenseCents);
     totalDiff.innerText = formatCentsToAmount(totals.diffCents);
     totalDiff.classList.toggle('is-negative', totals.diffCents < 0);
   };
@@ -1044,13 +1039,8 @@ function buildIncomeTable(year, data) {
     const monthKey = String(index + 1).padStart(2, '0');
     const rowData = months[monthKey] || {
       expensesCents: 0,
-      incomeCents: 0,
-      otherExpenseCents: null
+      incomeCents: 0
     };
-
-    if (rowData.otherExpenseCents === null || rowData.otherExpenseCents === undefined || rowData.otherExpenseCents < OTHER_EXPENSE_MIN_CENTS) {
-      rowData.otherExpenseCents = OTHER_EXPENSE_MIN_CENTS;
-    }
 
     const row = document.createElement('div');
     row.className = 'income-row';
@@ -1086,26 +1076,8 @@ function buildIncomeTable(year, data) {
       return true;
     });
 
-    const otherCell = createEditableAmountCell(rowData.otherExpenseCents || 0, async (nextCents, cancelEdit) => {
-      const prev = rowData.otherExpenseCents || 0;
-      const normalized = Math.max(nextCents, OTHER_EXPENSE_MIN_CENTS);
-      rowData.otherExpenseCents = normalized;
-      recalcTotals();
-      const ok = await saveMonthlyIncome(year, monthKey, { otherExpenseCents: normalized });
-      if (!ok) {
-        rowData.otherExpenseCents = prev;
-        recalcTotals();
-        cancelEdit();
-        showToast('No se pudieron guardar otros gastos');
-        return false;
-      }
-      return true;
-    });
-
     incomeCell.setAttribute('data-label', 'Ingresos');
-    otherCell.setAttribute('data-label', 'Otros gastos');
     row.appendChild(incomeCell);
-    row.appendChild(otherCell);
     row.appendChild(diffCell);
     container.appendChild(row);
     rows.push({ rowData, diffCell });
@@ -1129,11 +1101,6 @@ function buildIncomeTable(year, data) {
   totalIncome.className = 'income-cell';
   totalIncome.setAttribute('data-label', 'Ingresos');
   totalsRow.appendChild(totalIncome);
-
-  const totalOther = document.createElement('div');
-  totalOther.className = 'income-cell';
-  totalOther.setAttribute('data-label', 'Otros gastos');
-  totalsRow.appendChild(totalOther);
 
   const totalDiff = document.createElement('div');
   totalDiff.className = 'income-cell income-cell--diff';
@@ -1221,6 +1188,54 @@ function buildIncomeTable(year, data) {
 
   updateYearDiffCell();
   container.appendChild(yearRow);
+
+  // Botón para subir Excel
+  const uploadExcelBtn = document.createElement('button');
+  uploadExcelBtn.className = 'income-excel-btn income-upload-btn';
+  uploadExcelBtn.innerText = '📊 Subir Excel de movimientos';
+  uploadExcelBtn.onclick = () => {
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.xlsx,.xls';
+    fileInput.onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      const prevText = uploadExcelBtn.innerText;
+      uploadExcelBtn.disabled = true;
+      uploadExcelBtn.innerText = 'Procesando...';
+      
+      try {
+        const formData = new FormData();
+        formData.append('excel', file);
+        
+        const resp = await fetch('/income/upload-excel', {
+          method: 'POST',
+          body: formData
+        });
+        
+        const result = await resp.json();
+        
+        if (!resp.ok || !result.success) {
+          throw new Error(result.error || 'Error al procesar el Excel');
+        }
+        
+        showToast(`✅ ${result.message}`, 5000);
+        
+        // Recargar la tabla
+        await renderIncomePanel();
+        
+      } catch (err) {
+        console.error('Error uploading excel:', err);
+        showToast('❌ ' + err.message, 5000);
+      } finally {
+        uploadExcelBtn.disabled = false;
+        uploadExcelBtn.innerText = prevText;
+      }
+    };
+    fileInput.click();
+  };
+  container.appendChild(uploadExcelBtn);
 
   const exportIncomeBtn = document.createElement('button');
   exportIncomeBtn.className = 'income-excel-btn';

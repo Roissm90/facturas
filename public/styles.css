@@ -127,9 +127,20 @@ ul {
   }
 }
 
+.income-upload-btn {
+  background: #10b981;
+}
+.income-upload-btn:hover {
+  opacity: 0.9;
+}
+.income-upload-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .income-row {
   display: grid;
-  grid-template-columns: 1.2fr repeat(4, 1fr);
+  grid-template-columns: 1.2fr repeat(3, 1fr);
   gap: 8px;
   align-items: center;
   background: #fff;

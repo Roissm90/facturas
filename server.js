@@ -138,7 +138,7 @@ const monthlySummarySchema = new mongoose.Schema(
     year: { type: String, required: true },
     month: { type: String, required: true },
     incomeCents: { type: Number, default: 0 },
-    otherExpenseCents: { type: Number, default: 0 }
+    expensesCents: { type: Number, default: 0 }
   },
   { timestamps: true }
 );
@@ -327,7 +327,6 @@ async function buildIncomeExcelBuffer(year, months, yearSummary) {
     { header: 'Mes', key: 'month' },
     { header: 'Gastos', key: 'expenses' },
     { header: 'Ingresos', key: 'income' },
-    { header: 'Otros gastos', key: 'other' },
     { header: 'Diferencia', key: 'diff' },
     { header: '', key: 'spacer', width: 3 },
     { header: 'Saldo año', key: 'yearLabel' },
@@ -339,7 +338,6 @@ async function buildIncomeExcelBuffer(year, months, yearSummary) {
   const totals = {
     expensesCents: 0,
     incomeCents: 0,
-    otherExpenseCents: 0,
     diffCents: 0
   };
 
@@ -347,21 +345,18 @@ async function buildIncomeExcelBuffer(year, months, yearSummary) {
     const monthKey = String(index + 1).padStart(2, '0');
     const rowData = months[monthKey] || {
       expensesCents: 0,
-      incomeCents: 0,
-      otherExpenseCents: OTHER_EXPENSE_MIN_CENTS
+      incomeCents: 0
     };
 
-    const diff = (rowData.incomeCents || 0) - ((rowData.expensesCents || 0) + (rowData.otherExpenseCents || 0));
+    const diff = (rowData.incomeCents || 0) - (rowData.expensesCents || 0);
     totals.expensesCents += rowData.expensesCents || 0;
     totals.incomeCents += rowData.incomeCents || 0;
-    totals.otherExpenseCents += rowData.otherExpenseCents || 0;
     totals.diffCents += diff;
 
     worksheet.addRow({
       month: monthLabel,
       expenses: formatCentsToAmount(rowData.expensesCents || 0),
       income: formatCentsToAmount(rowData.incomeCents || 0),
-      other: formatCentsToAmount(rowData.otherExpenseCents || 0),
       diff: formatCentsToAmount(diff)
     });
   });
@@ -370,7 +365,6 @@ async function buildIncomeExcelBuffer(year, months, yearSummary) {
     month: 'Totales',
     expenses: formatCentsToAmount(totals.expensesCents),
     income: formatCentsToAmount(totals.incomeCents),
-    other: formatCentsToAmount(totals.otherExpenseCents),
     diff: formatCentsToAmount(totals.diffCents)
   });
 
@@ -382,7 +376,7 @@ async function buildIncomeExcelBuffer(year, months, yearSummary) {
   yearRow.getCell(10).value = formatCentsToAmount(yearDiff);
 
   const headerRow = worksheet.getRow(1);
-  [1, 2, 3, 4, 5, 7, 8, 9, 10].forEach((col) => {
+  [1, 2, 3, 4, 6, 7, 8, 9].forEach((col) => {
     const cell = headerRow.getCell(col);
     cell.fill = {
       type: 'pattern',
@@ -393,7 +387,7 @@ async function buildIncomeExcelBuffer(year, months, yearSummary) {
   });
 
   totalRow.eachCell((cell, colNumber) => {
-    if (colNumber > 5) return;
+    if (colNumber > 4) return;
     cell.fill = {
       type: 'pattern',
       pattern: 'solid',
@@ -402,7 +396,7 @@ async function buildIncomeExcelBuffer(year, months, yearSummary) {
     cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
   });
 
-  [7, 8, 9, 10].forEach((col) => {
+  [6, 7, 8, 9].forEach((col) => {
     const cell = yearRow.getCell(col);
     cell.fill = {
       type: 'pattern',
@@ -902,27 +896,16 @@ app.get('/export/income/:year', async (req, res) => {
     const months = Object.fromEntries(
       Array.from({ length: 12 }, (_, i) => {
         const key = String(i + 1).padStart(2, '0');
-        return [key, { expensesCents: 0, incomeCents: 0, otherExpenseCents: OTHER_EXPENSE_MIN_CENTS }];
+        return [key, { expensesCents: 0, incomeCents: 0 }];
       })
     );
-
-    const invoices = await Invoice.find({ year }).lean();
-    for (const doc of invoices) {
-      if (doc.isFuel) continue;
-      const month = String(doc.month || '').padStart(2, '0');
-      if (!months[month]) continue;
-      const totalText = decryptText(doc.totalAmountEnc);
-      const cents = parseAmountToCents(totalText) || 0;
-      months[month].expensesCents += cents;
-    }
 
     const summaries = await MonthlySummary.find({ year }).lean();
     for (const summary of summaries) {
       const month = String(summary.month || '').padStart(2, '0');
       if (!months[month]) continue;
       months[month].incomeCents = summary.incomeCents || 0;
-      const otherValue = summary.otherExpenseCents || 0;
-      months[month].otherExpenseCents = Math.max(otherValue, OTHER_EXPENSE_MIN_CENTS);
+      months[month].expensesCents = summary.expensesCents || 0;
     }
 
     const yearDoc = await AnnualSummary.findOne({ year }).lean();
@@ -1000,27 +983,16 @@ app.get('/income/year/:year', async (req, res) => {
     const months = Object.fromEntries(
       Array.from({ length: 12 }, (_, i) => {
         const key = String(i + 1).padStart(2, '0');
-        return [key, { expensesCents: 0, incomeCents: 0, otherExpenseCents: OTHER_EXPENSE_MIN_CENTS }];
+        return [key, { expensesCents: 0, incomeCents: 0 }];
       })
     );
-
-    const invoices = await Invoice.find({ year }).lean();
-    for (const doc of invoices) {
-      if (doc.isFuel) continue;
-      const month = String(doc.month || '').padStart(2, '0');
-      if (!months[month]) continue;
-      const totalText = decryptText(doc.totalAmountEnc);
-      const cents = parseAmountToCents(totalText) || 0;
-      months[month].expensesCents += cents;
-    }
 
     const summaries = await MonthlySummary.find({ year }).lean();
     for (const summary of summaries) {
       const month = String(summary.month || '').padStart(2, '0');
       if (!months[month]) continue;
       months[month].incomeCents = summary.incomeCents || 0;
-      const otherValue = summary.otherExpenseCents || 0;
-      months[month].otherExpenseCents = Math.max(otherValue, OTHER_EXPENSE_MIN_CENTS);
+      months[month].expensesCents = summary.expensesCents || 0;
     }
 
     const yearDoc = await AnnualSummary.findOne({ year }).lean();
@@ -1117,11 +1089,10 @@ app.post('/income/month', async (req, res) => {
       const cents = parseCentsInput(incomeValue);
       update.incomeCents = cents === null ? 0 : cents;
     }
-    if (Object.prototype.hasOwnProperty.call(req.body, 'otherExpenseCents') || Object.prototype.hasOwnProperty.call(req.body, 'otherExpense')) {
-      const otherValue = Object.prototype.hasOwnProperty.call(req.body, 'otherExpenseCents') ? req.body.otherExpenseCents : req.body.otherExpense;
-      const cents = parseCentsInput(otherValue);
-      const normalized = cents === null ? 0 : cents;
-      update.otherExpenseCents = Math.max(normalized, OTHER_EXPENSE_MIN_CENTS);
+    if (Object.prototype.hasOwnProperty.call(req.body, 'expensesCents') || Object.prototype.hasOwnProperty.call(req.body, 'expenses')) {
+      const expenseValue = Object.prototype.hasOwnProperty.call(req.body, 'expensesCents') ? req.body.expensesCents : req.body.expenses;
+      const cents = parseCentsInput(expenseValue);
+      update.expensesCents = cents === null ? 0 : cents;
     }
 
     if (Object.keys(update).length === 0) {
@@ -1140,12 +1111,167 @@ app.post('/income/month', async (req, res) => {
         year: doc.year,
         month: doc.month,
         incomeCents: doc.incomeCents || 0,
-        otherExpenseCents: doc.otherExpenseCents || 0
+        expensesCents: doc.expensesCents || 0
       }
     });
   } catch (e) {
     console.error('income month error', e);
     return res.status(500).json({ success: false, error: 'income save failed' });
+  }
+});
+
+app.post('/income/upload-excel', upload.single('excel'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'No file uploaded' });
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(req.file.buffer);
+    
+    const worksheet = workbook.worksheets[0];
+    if (!worksheet) {
+      return res.status(400).json({ success: false, error: 'No worksheet found' });
+    }
+
+    // Buscar encabezados en las primeras 10 filas
+    let headerRow = null;
+    let headerRowIndex = -1;
+    let dateColIndex = -1;
+    let amountColIndex = -1;
+
+    for (let i = 1; i <= Math.min(10, worksheet.rowCount); i++) {
+      const row = worksheet.getRow(i);
+      let foundDate = false;
+      let foundAmount = false;
+      
+      row.eachCell((cell, colNumber) => {
+        const cellValue = String(cell.value || '').toLowerCase().trim();
+        // Buscar columna de fecha (FECHA OPERACIÓN o FECHA VALOR)
+        if (cellValue.includes('fecha') && (cellValue.includes('operaci') || cellValue.includes('valor'))) {
+          dateColIndex = colNumber;
+          foundDate = true;
+        }
+        // Buscar columna de importe (IMPORTE EUR o similar)
+        if (cellValue.includes('importe') || cellValue.includes('eur')) {
+          amountColIndex = colNumber;
+          foundAmount = true;
+        }
+      });
+
+      if (foundDate && foundAmount) {
+        headerRow = row;
+        headerRowIndex = i;
+        break;
+      }
+    }
+
+    if (!headerRow || dateColIndex === -1 || amountColIndex === -1) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'No se encontraron las columnas necesarias (FECHA y IMPORTE EUR)' 
+      });
+    }
+
+    // Procesar filas de datos
+    const movements = [];
+    for (let i = headerRowIndex + 1; i <= worksheet.rowCount; i++) {
+      const row = worksheet.getRow(i);
+      const dateCell = row.getCell(dateColIndex);
+      const amountCell = row.getCell(amountColIndex);
+
+      if (!dateCell.value) continue;
+
+      let date = null;
+      // Intentar parsear la fecha
+      if (dateCell.value instanceof Date) {
+        date = dateCell.value;
+      } else if (typeof dateCell.value === 'string') {
+        date = parseDateFlexible(dateCell.value);
+      } else if (typeof dateCell.value === 'number') {
+        // Excel serial date
+        const excelEpoch = new Date(1899, 11, 30);
+        date = new Date(excelEpoch.getTime() + dateCell.value * 86400000);
+      }
+
+      if (!date || isNaN(date.getTime())) continue;
+
+      const amountText = String(amountCell.value || '').trim();
+      if (!amountText) continue;
+
+      const amountCents = parseAmountToCents(amountText);
+      if (amountCents === null) continue;
+
+      movements.push({
+        date: date,
+        amountCents: amountCents
+      });
+    }
+
+    if (movements.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'No se encontraron movimientos válidos en el Excel' 
+      });
+    }
+
+    // Agrupar por año-mes y sumar ingresos/gastos
+    const summary = {};
+    for (const movement of movements) {
+      const year = String(movement.date.getFullYear());
+      const month = String(movement.date.getMonth() + 1).padStart(2, '0');
+      const key = `${year}-${month}`;
+      
+      if (!summary[key]) {
+        summary[key] = {
+          year,
+          month,
+          incomeCents: 0,
+          expensesCents: 0
+        };
+      }
+
+      if (movement.amountCents > 0) {
+        summary[key].incomeCents += movement.amountCents;
+      } else {
+        summary[key].expensesCents += Math.abs(movement.amountCents);
+      }
+    }
+
+    // Guardar en base de datos
+    const updates = [];
+    for (const key in summary) {
+      const data = summary[key];
+      updates.push(
+        MonthlySummary.findOneAndUpdate(
+          { year: data.year, month: data.month },
+          { 
+            $set: { 
+              incomeCents: data.incomeCents,
+              expensesCents: data.expensesCents
+            } 
+          },
+          { upsert: true, new: true, setDefaultsOnInsert: true }
+        )
+      );
+    }
+
+    await Promise.all(updates);
+
+    return res.json({ 
+      success: true, 
+      message: `Procesados ${movements.length} movimientos`,
+      summary: Object.values(summary).map(s => ({
+        year: s.year,
+        month: s.month,
+        income: formatCentsToAmount(s.incomeCents),
+        expenses: formatCentsToAmount(s.expensesCents)
+      }))
+    });
+
+  } catch (e) {
+    console.error('upload excel error', e);
+    return res.status(500).json({ success: false, error: 'Error al procesar el Excel' });
   }
 });
 
