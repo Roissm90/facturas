@@ -940,7 +940,7 @@ function createEditableAmountCell(initialCents, onCommit) {
     cell.appendChild(input);
     input.focus();
     input.select();
-    debugger;
+    //debugger;
 
     const cancel = () => {
       cell.classList.remove('is-editing');

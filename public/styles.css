@@ -145,6 +145,8 @@ ul {
 
 .income-cell--label {
   font-weight: 600;
+  text-align: left;
+  margin-left: 43%;
 }
 
 .income-cell--muted {
@@ -202,6 +204,7 @@ ul {
   }
   .income-cell.income-cell--label {
     display: flex;
+    margin-left: 0;
   }
   .income-cell::before {
     content: attr(data-label);
