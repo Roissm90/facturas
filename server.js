@@ -289,9 +289,18 @@ function sanitizeFilename(name) {
 
 function parseAmountToCents(value) {
   if (value === null || value === undefined) return null;
-  const trimmed = String(value).trim();
-  if (!trimmed) return null;
-  const cleaned = trimmed.replace(/[^0-9,.-]/g, '');
+  let str = String(value).trim();
+  if (!str) return null;
+
+  // Reemplazar signos menos no estándar por el estándar
+  // Incluye: guion largo (U+2013, U+2014), guion corto, etc.
+  str = str.replace(/[−‒–—―]/g, '-');
+
+  // Eliminar espacios entre el signo y el número
+  str = str.replace(/-\s+/g, '-');
+
+  // Eliminar cualquier carácter que no sea dígito, punto, coma o menos
+  const cleaned = str.replace(/[^0-9,.-]/g, '');
   if (!cleaned) return null;
 
   const hasComma = cleaned.includes(',');
@@ -309,6 +318,9 @@ function parseAmountToCents(value) {
   } else if (hasComma) {
     normalized = cleaned.replace(',', '.');
   }
+
+  // Asegurarse de que el signo negativo esté al principio
+  normalized = normalized.replace(/(.*)-/, '-$1').replace(/--/g, '-');
 
   const num = Number.parseFloat(normalized);
   if (Number.isNaN(num)) return null;
@@ -1226,21 +1238,28 @@ app.post('/income/upload-excel', upload.single('excel'), async (req, res) => {
 
     console.log(`📄 Total de filas: ${data.length}`);
 
-    // Buscar columna de IMPORTE EUR
+    // Buscar columna de Importe o Importe EUR (aceptar ambos formatos)
     let headerRowIndex = -1;
     let amountColIndex = -1;
+
+    const isImporteHeader = (cellValue) => {
+      const normalized = String(cellValue || '').toLowerCase().replace(/\s+/g, ' ').trim();
+      return (
+        normalized === 'importe' ||
+        normalized === 'importe eur' ||
+        normalized === 'importe_eur' ||
+        normalized === 'importeeur'
+      );
+    };
 
     for (let i = 0; i < Math.min(10, data.length); i++) {
       const row = data[i];
       if (!row) continue;
-      
+
       let foundAmount = false;
-      
+
       row.forEach((cell, colIndex) => {
-        const cellValue = String(cell || '').toLowerCase().trim();
-        
-        // Buscar columna de importe
-        if (cellValue.includes('importe') /*&& cellValue.includes('eur')*/) {
+        if (isImporteHeader(cell)) {
           amountColIndex = colIndex;
           foundAmount = true;
           console.log(`✅ Columna IMPORTE encontrada en posición ${colIndex}: "${cell}"`);
@@ -1263,14 +1282,17 @@ app.post('/income/upload-excel', upload.single('excel'), async (req, res) => {
       });
       return res.status(400).json({ 
         success: false, 
-        error: 'No se encontró la columna "IMPORTE EUR". Verifica que el archivo tiene este encabezado.' 
+        error: 'No se encontró la columna "Importe" o "IMPORTE EUR". Verifica que el archivo tiene este encabezado.' 
       });
     }
 
-    // Procesar filas de datos (solo sumar importes, ignorar fechas)
+
+    // Procesar filas de datos (sumar importes y guardar arrays para depuración)
     let totalIncomeCents = 0;
     let totalExpenseCents = 0;
     let movementCount = 0;
+    const ingresos = [];
+    const gastos = [];
 
     for (let i = headerRowIndex + 1; i < data.length; i++) {
       const row = data[i];
@@ -1288,11 +1310,15 @@ app.post('/income/upload-excel', upload.single('excel'), async (req, res) => {
 
       if (amountCents > 0) {
         totalIncomeCents += amountCents;
+        ingresos.push(amountText);
       } else {
         totalExpenseCents += Math.abs(amountCents);
+        gastos.push(amountText);
       }
       movementCount++;
     }
+
+    // ...
 
     if (movementCount === 0) {
       console.error('No se encontraron movimientos válidos');
