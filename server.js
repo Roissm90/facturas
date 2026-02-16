@@ -1240,7 +1240,7 @@ app.post('/income/upload-excel', upload.single('excel'), async (req, res) => {
         const cellValue = String(cell || '').toLowerCase().trim();
         
         // Buscar columna de importe
-        if (cellValue.includes('importe') && cellValue.includes('eur')) {
+        if (cellValue.includes('importe') /*&& cellValue.includes('eur')*/) {
           amountColIndex = colIndex;
           foundAmount = true;
           console.log(`✅ Columna IMPORTE encontrada en posición ${colIndex}: "${cell}"`);
